@@ -4,6 +4,7 @@
 #include "command-internals.h"
 
 #include <error.h>
+#include <stddef.h>
 
 /* FIXME: You may need to add #include directives, macro definitions,
    static function definitions, etc.  */
@@ -49,7 +50,11 @@ make_command_stream (int (*get_next_byte) (void *),
 command_t
 read_command_stream (command_stream_t s)
 {
-  /* FIXME: Replace this with your implementation too.  */
-  error (1, 0, "command reading not yet implemented");
-  return 0;
+  if (s->iterator == s->stream_size)
+  {
+    s->iterator = 0;
+    return NULL;
+  }
+
+  return s->commands[s->iterator++];
 }
