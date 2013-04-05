@@ -26,6 +26,15 @@ struct command_stream
 };
 
 /**
+ * Recursively analyses expression and builds the nested command_t structs.
+ */
+command_t*
+make_command_from_expression (char *expr)
+{
+  return NULL;
+}
+
+/**
  * Reads through a stream and assembles a command_stream by decomposing
  * the stream into individual commands.
  *
