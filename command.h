@@ -1,6 +1,7 @@
 // UCLA CS 111 Lab 1 command interface
 
 #include <stdbool.h>
+#include <stdio.h> // For size_t
 
 #define SEQUENCE_COMMAND_CHAR       ';'
 #define PIPE_COMMAND_CHAR           '|'
@@ -65,7 +66,7 @@ enum command_type convert_token_to_command_type (char* token);
  * It assumes that input expressions are valid, thus validation checks should
  * be performed outside.
  */
-command_t make_command_from_expression (char *expr);
+command_t make_command_from_expression (const char *expr);
 
 /**
  * Analyzes a given expression string. Returns true if valid, generates the proper
@@ -77,4 +78,14 @@ bool is_valid_expression (char *expr);
  * Converts the specified expression to a command through make_command_from_expression
  * and adds it to the specified command stream.
  */
-command_stream_t add_expression_to_stream (char *expr, command_stream_t stream);
+void add_expression_to_stream (const char *expr, command_stream_t stream);
+
+/**
+ * Add the given string to the expression buffer and resize the buffer if necessary.
+ */
+char* add_char_to_expression (char c, char *expr, size_t *expr_utilized, size_t *expr_size);
+
+/**
+ * Check if the expression consists of a token at the specified point.
+ */
+bool token_ends_at_point(const char *expr, size_t point);
