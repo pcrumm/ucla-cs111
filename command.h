@@ -42,12 +42,15 @@ int command_status (command_t);
 bool is_valid_token (char *expr);
 
 /**
- * Returns a pointer to the next valid token by default, even if the current
- * pointer is one. A TRUE value for return_first_valid_token will give the first
- * token, including if already pointed at. If no token is found, a pointer
- * to the end of the string is returned.
+ * Returns a pointer to the next valid token. If no token is
+ * found, a pointer to the end of the string is returned.
  */
-char* get_next_valid_token (char *expr, bool return_first_valid_token = false);
+char* get_next_valid_token (char *expr);
+
+/**
+ * Frees all memory associated with a command
+ */
+void free_command (command_t c);
 
 /**
  * Converts any char token equivalent of the command_type enum
