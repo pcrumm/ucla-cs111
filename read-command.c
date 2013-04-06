@@ -174,14 +174,14 @@ make_command_stream (int (*get_next_byte) (void *),
    {
     // If this is not a newline or a comment, just add it to the buffer...
     if (current_char != '\n' && current_char != '#' && !in_comment)
-      add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
+      expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
 
     // Comments
     else if (current_char == '#')
     {
       // If we're immediately preceded by a token, this is not a comment.
       if (token_ends_at_point (expression_buffer, current_expression_size))
-        add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
+        expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
 
       else
         in_comment = true;
@@ -193,13 +193,13 @@ make_command_stream (int (*get_next_byte) (void *),
       // Firstly, comments: newlines end comments.
       if (in_comment)
       {
-        add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
+        expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
         in_comment = false;
       }
 
       // Next, handle cases where lines end with tokens. The expression continues.
       else if (token_ends_at_point (expression_buffer, current_expression_size))
-        add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
+        expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
 
       // We've found the end of an expression!
       else if (is_valid_expression (expression_buffer))
@@ -210,7 +210,7 @@ make_command_stream (int (*get_next_byte) (void *),
         free (expression_buffer);
         expression_buffer_size = 1024;
         current_expression_size = 0;
-        
+
         expression_buffer = checked_malloc (expression_buffer_size * sizeof (char));
       }
     }
