@@ -66,3 +66,15 @@ enum command_type convert_token_to_command_type (char* token);
  * be performed outside.
  */
 command_t make_command_from_expression (char *expr);
+
+/**
+ * Analyzes a given expression string. Returns true if valid, generates the proper
+ * error if not.
+ */
+bool is_valid_expression (char *expr);
+
+/**
+ * Converts the specified expression to a command through make_command_from_expression
+ * and adds it to the specified command stream.
+ */
+command_stream_t add_expression_to_stream (char *expr, command_stream_t stream);
