@@ -2,6 +2,16 @@
 
 #include <stdbool.h>
 
+#define SEQUENCE_COMMAND_CHAR       ';'
+#define PIPE_COMMAND_CHAR           '|'
+#define SUBSHELL_COMMAND_CHAR_OPEN  '('
+#define SUBSHELL_COMMAND_CHAR_CLOSE ')'
+#define FILE_IN_CHAR                '<'
+#define FILE_OUT_CHAR               '>'
+
+#define AND_COMMAND_STR             "&&"
+#define OR_COMMAND_STR              "||"
+
 typedef struct command *command_t;
 typedef struct command_stream *command_stream_t;
 
@@ -24,3 +34,32 @@ void execute_command (command_t, bool);
 /* Return the exit status of a command, which must have previously
    been executed.  Wait for the command, if it is not already finished.  */
 int command_status (command_t);
+
+/**
+ * Checks whether the character pointed to by expr is a valid token. In the case
+ * of multichar tokens such as "&&", the next character is checked as well.
+ */
+bool is_valid_token (char *expr);
+
+/**
+ * Returns a pointer to the next valid token by default, even if the current
+ * pointer is one. A TRUE value for return_first_valid_token will give the first
+ * token, including if already pointed at. If no token is found, a pointer
+ * to the end of the string is returned.
+ */
+char* get_next_valid_token (char *expr, bool return_first_valid_token = false);
+
+/**
+ * Converts any char token equivalent of the command_type enum
+ * into the enum type. If no token is found SIMPLE_COMMAND is
+ * returned. FILE_IN_CHAR and FILE_OUT_CHAR ('<' and '>', respectively)
+ * are NOT currently handled and SIMPLE_COMMAND will be returned.
+ */
+enum command_type convert_token_to_command_type (char* token);
+
+/**
+ * Recursively analyses expression and builds the nested command_t structs.
+ * It assumes that input expressions are valid, thus validation checks should
+ * be performed outside.
+ */
+command_t make_command_from_expression (char *expr);
