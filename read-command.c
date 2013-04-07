@@ -423,8 +423,8 @@ make_command_stream (int (*get_next_byte) (void *),
     // Comments
     else if (current_char == COMMENT_CHAR)
     {
-      // If we're immediately preceded by a token, this is not a comment.
-      if (token_ends_at_point (expression_buffer, current_expression_size))
+      // If we're immediately preceded by a token or a normal word, this is not a comment.
+      if (token_ends_at_point (expression_buffer, current_expression_size) || is_valid_word_char ((char) *(expression_buffer + current_expression_size - 1)))
         expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
 
       else
