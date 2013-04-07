@@ -33,8 +33,8 @@ struct command_stream
 void
 free_command (command_t c)
 {
-  free(c->input);
-  free(c->output);
+  free (c->input);
+  free (c->output);
 
   switch (c->type)
   {
@@ -42,25 +42,25 @@ free_command (command_t c)
     case SEQUENCE_COMMAND:
     case OR_COMMAND:
     case PIPE_COMMAND:
-      free_command(c->u.command[0]);
-      free_command(c->u.command[1]);
+      free_command (c->u.command[0]);
+      free_command (c->u.command[1]);
       break;
     case SIMPLE_COMMAND:
       {
         char** w = c->u.word;
         while (*w)
-          free(*w++);
+          free (*w++);
 
-        free(c->u.word);
+        free (c->u.word);
         break;
       }
     case SUBSHELL_COMMAND:
-      free_command(c->u.subshell_command);
+      free_command (c->u.subshell_command);
       break;
     default: break;
   }
 
-  free(c);
+  free (c);
 }
 
 bool
