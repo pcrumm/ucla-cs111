@@ -298,11 +298,11 @@ make_command_stream (int (*get_next_byte) (void *),
    char *expression_buffer = checked_malloc (expression_buffer_size * sizeof (char));
 
    // Setup our command stream
-   command_stream_t expression_stream = malloc (sizeof (struct command_stream));
+   command_stream_t expression_stream = checked_malloc (sizeof (struct command_stream));
    expression_stream->iterator = 0;
    expression_stream->stream_size = 0;
    expression_stream->alloc_size = 16;
-   expression_stream->commands = malloc (expression_stream->alloc_size * sizeof (command_t));
+   expression_stream->commands = checked_malloc (expression_stream->alloc_size * sizeof (command_t));
 
    char current_char;
    int current_line_number = 0;
