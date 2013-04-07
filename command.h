@@ -44,19 +44,19 @@ int command_status (command_t);
  * Checks whether the character pointed to by expr is a valid token. In the case
  * of multichar tokens such as "&&", the next character is checked as well.
  */
-bool is_valid_token (char *expr);
+bool is_valid_token (char const *expr);
 
 /**
  * Returns a pointer to the next valid token. If no token is
  * found, a pointer to the end of the string is returned.
  */
-char* get_next_valid_token (char *expr);
+char const * get_next_valid_token (char const *expr);
 
 /**
  * Searches the expression in reverse for the specified token.
  * A NULL return value indicates token was not found.
  */
-char* rev_find_token (char *expr, enum command_type type);
+char const * rev_find_token (char const *expr, const enum command_type type);
 
 /**
  * Finds and returns a pointer to the right-most lowest precedence operator found
@@ -67,12 +67,12 @@ char* rev_find_token (char *expr, enum command_type type);
  *
  * A null return value indicates no tokens found (ie SIMPLE_COMMAND).
  */
-char* get_pivot_token (char *expr);
+char const * get_pivot_token (char const *expr);
 
 /**
  * Splits expr by the specified token and returns an array of char*
  */
-char** split_expression_by_token (char *expr, char token);
+char** split_expression_by_token (char const *expr, char token);
 
 /**
  * Frees all memory associated with a command
@@ -85,14 +85,14 @@ void free_command (command_t c);
  * returned. FILE_IN_CHAR and FILE_OUT_CHAR ('<' and '>', respectively)
  * are NOT currently handled and SIMPLE_COMMAND will be returned.
  */
-enum command_type convert_token_to_command_type (char* token);
+enum command_type convert_token_to_command_type (char const *token);
 
 /**
  * Recursively analyses expression and builds the nested command_t structs.
  * It assumes that input expressions are valid, thus validation checks should
  * be performed outside.
  */
-command_t make_command_from_expression (const char *expr);
+command_t make_command_from_expression (const char * const expr);
 
 /**
  * Analyzes a given expression string. Returns true if valid, generates the proper

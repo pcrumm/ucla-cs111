@@ -64,7 +64,7 @@ free_command (command_t c)
 }
 
 bool
-is_valid_token (char *expr)
+is_valid_token (char const *expr)
 {
   // Alphanumeric and space characters (or NULL pointer) are NOT tokens
   if(isalnum (expr[0]) || isspace (expr[0]) || !expr)
@@ -94,10 +94,29 @@ is_valid_token (char *expr)
   return false;
 }
 
-char*
-rev_find_token (char *expr, enum command_type type)
+char const *
+get_next_valid_token (char const *expr)
 {
-  char *p = expr;
+  if(expr == NULL)
+    return NULL;
+
+  expr++;
+
+  while (*expr != '\0')
+    {
+      if(is_valid_token(expr))
+        break;
+
+      expr++;
+    }
+
+  return expr;
+}
+
+char const *
+rev_find_token (char const *expr, const enum command_type type)
+{
+  char const *p = expr;
 
   // Find the end of the string
   while (*p)
@@ -136,11 +155,11 @@ rev_find_token (char *expr, enum command_type type)
     return NULL;
 }
 
-char*
-get_pivot_token (char *expr)
+char const *
+get_pivot_token (char const *expr)
 {
   // Search for tokens using lowest precedence first
-  char *token;
+  char const *token;
 
   // Checking ';'
   token = rev_find_token (expr, SEQUENCE_COMMAND);
@@ -148,7 +167,8 @@ get_pivot_token (char *expr)
   // Checking equal precedence '&&' and '||'
   if(token == NULL)
     {
-      char *and_token, *or_token;
+      char const *and_token;
+      char const *or_token;
 
       and_token = rev_find_token (expr, AND_COMMAND);
       or_token  = rev_find_token (expr, OR_COMMAND);
@@ -175,11 +195,16 @@ get_pivot_token (char *expr)
 }
 
 char**
-split_expression_by_token (char *expr, char token)
+split_expression_by_token (char const *expr, char token)
 {
-  char *p = expr;
-  size_t size = 1; // At least 1 element exists
+  char token_string[] = { token };  // strtok expects a NULL delimited string, not just a char
+  char *p;                          // Generic pointer to iterate through characters
+  char *expr_copy;                  // Copy expr as strtok internally modifies strings so we copy expr
+  size_t size = 1;                  // At least 1 element exists
   size_t index = 0;
+
+  expr_copy = checked_malloc (sizeof (char) * strlen (expr));
+  p = strcpy (expr_copy, expr);
 
   while (*p)
     {
@@ -191,7 +216,7 @@ split_expression_by_token (char *expr, char token)
 
   char** array = checked_malloc (sizeof (char*) * size);
 
-  p = strtok (expr, &token);
+  p = strtok (expr_copy, token_string);
 
   while (p)
     {
@@ -199,16 +224,17 @@ split_expression_by_token (char *expr, char token)
       strcpy (new_str, p);
 
       array[index++] = new_str;
-      p = strtok (NULL, &token);
+      p = strtok (NULL, token_string);
     }
 
   array[index] = NULL;
 
+  free (expr_copy);
   return array;
 }
 
 enum command_type
-convert_token_to_command_type (char* token)
+convert_token_to_command_type (char const *token)
 {
   if(token[0] == token[1] && token[0] == '&')
     return AND_COMMAND;
