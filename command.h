@@ -9,6 +9,8 @@
 #define SUBSHELL_COMMAND_CHAR_CLOSE ')'
 #define FILE_IN_CHAR                '<'
 #define FILE_OUT_CHAR               '>'
+#define COMMENT_CHAR                '#'
+#define NEWLINE_CHAR                '\n'
 
 #define AND_COMMAND_STR             "&&"
 #define OR_COMMAND_STR              "||"

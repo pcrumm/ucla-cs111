@@ -167,17 +167,17 @@ make_command_stream (int (*get_next_byte) (void *),
 
    char current_char;
 
-    // Anything between a % and a newline is a comment. We don't write them to our buffer.
+    // Anything between a COMMENT_CHAR and a newline is a comment. We don't write them to our buffer.
    bool in_comment = false;
 
    while ((current_char = get_next_byte (get_next_byte_argument)) != EOF)
    {
     // If this is not a newline or a comment, just add it to the buffer...
-    if (current_char != '\n' && current_char != '#' && !in_comment)
+    if (current_char != NEWLINE_CHAR && current_char != COMMENT_CHAR && !in_comment)
       expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
 
     // Comments
-    else if (current_char == '#')
+    else if (current_char == COMMENT_CHAR)
     {
       // If we're immediately preceded by a token, this is not a comment.
       if (token_ends_at_point (expression_buffer, current_expression_size))
@@ -188,7 +188,7 @@ make_command_stream (int (*get_next_byte) (void *),
     }
 
     // Deal with newlines
-    else if (current_char == '\n')
+    else if (current_char == NEWLINE_CHAR)
     {
       // Firstly, comments: newlines end comments.
       if (in_comment)
@@ -241,26 +241,17 @@ token_ends_at_point(const char *expr, size_t point)
   if (point == 0) // Can't start with a token.
     return false;
 
-  // We want to know if point (or point and point-1) are a valid token.
-  char *single_token = checked_malloc (sizeof (char) * 1);
-  memcpy (single_token, expr + point, 1);
-
-  if (is_valid_token (single_token))
+  const char *single_token_location = expr + point;
+  if (is_valid_token (single_token_location))
   {
-    free (single_token);
     return true;
   }
 
-  // Let's see if there's a valid double token
-  char *double_token = checked_realloc (single_token, sizeof (char) * 2);
-  memcpy (single_token, expr + (point - 1), 2);
-
-  if (is_valid_token (double_token))
+  const char *double_token_location = expr + (point - 1);
+  if (is_valid_token (double_token_location))
   {
     // Figure out if this is a two-character token
-    enum command_type type = convert_token_to_command_type (double_token);
-
-    free (double_token); // We will return from here so make sure we clean up
+    enum command_type type = convert_token_to_command_type (double_token_location);
 
     switch (type)
     {
@@ -272,8 +263,7 @@ token_ends_at_point(const char *expr, size_t point)
     }
   }
 
-  // If we got this far, we're not valid. Clean up and get out.
-  free (double_token);
+  // If we got this far, we're not valid.
   return false;
 }
 
