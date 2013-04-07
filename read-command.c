@@ -463,9 +463,7 @@ is_valid_expression (const char *expr)
 
   enum command_type previous_token_type;
 
-  // We need to pre-crement i here so that current_char is copied correctly
-  // in case we altered i in our loop body.
-  for (i = -1; (current_char = expr[i]) != '\0'; ++i)
+  for (i = 0; (current_char = expr[i]) != '\0' ; ++i)
   {
     // A note: tokens and words do not share any characters.
     if (is_valid_word_char (current_char))
@@ -537,7 +535,7 @@ is_valid_expression (const char *expr)
   }
 
   // Ending in a token isn't cool, unless it's a pipeline
-  if (previous_was_token && previous_token_type != PIPE_COMMAND_CHAR)
+  if (previous_was_token && previous_token_type != PIPE_COMMAND)
     return false;
 
   /**
@@ -545,6 +543,8 @@ is_valid_expression (const char *expr)
    * Here, we check for redirect ordering and parenthesis mismatching.
    * If we make it through here, we should be okay.
    */
+
+
 
   return true; // If we reached the end, everything is cool.
 }
