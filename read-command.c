@@ -453,13 +453,13 @@ make_command_stream (int (*get_next_byte) (void *),
         // Add the terminator...
         expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
 
-        if (is_valid_expression (expression_buffer, &current_expression_size))
+        if (is_valid_expression (expression_buffer, &current_expr_line_number))
           add_expression_to_stream (expression_buffer, expression_stream);
 
         // Display an error message to stderr and exit if there's an error.
         else
         {
-          fprintf (stderr, "%d: Incorrect syntax", total_lines_read + current_expr_line_number);
+          fprintf (stderr, "%d: Incorrect syntax: %s", total_lines_read + current_expr_line_number, expression_buffer);
           exit (EXIT_FAILURE);
         }
 
@@ -540,7 +540,7 @@ add_expression_to_stream (const char *expr, command_stream_t stream)
 }
 
 bool
-is_valid_expression (const char *expr, size_t *expr_line_number)
+is_valid_expression (const char *expr, int *expr_line_number)
 {
   /**
    * To validate everything, we'll need to use multiple passes.

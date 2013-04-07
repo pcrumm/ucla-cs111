@@ -99,7 +99,7 @@ command_t make_command_from_expression (const char * const expr);
  * If the expression is invalid, we'll also set expr_line_number, which is the
  * line number /within the expression/ that the error occurred on.
  */
-bool is_valid_expression (const char *expr, size_t *expr_line_number);
+bool is_valid_expression (const char *expr, int *expr_line_number);
 
 /**
  * Converts the specified expression to a command through make_command_from_expression
