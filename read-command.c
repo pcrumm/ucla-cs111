@@ -93,6 +93,119 @@ is_valid_token (char *expr)
   return false;
 }
 
+char*
+rev_find_token (char *expr, enum command_type type)
+{
+  char *p = expr;
+
+  // Find the end of the string
+  while (*p)
+    p++;
+
+  while (expr >= p)
+    {
+      bool is_valid = is_valid_token (p);
+      enum command_type cur_type;
+
+      // If '|' is found, check that the token isnt really '||'
+      if(is_valid && *p == PIPE_COMMAND && is_valid_token (p - 1))
+          p--;
+
+      cur_type = convert_token_to_command_type (p);
+
+      // Return whenever the current token type matches the desired type
+      // Since both '(' and ')' are marked as SUBSHELL_COMMAND we explicitly
+      // check for ONLY '(' tokens
+      if(cur_type == type)
+      {
+        if(type == SUBSHELL_COMMAND)
+          {
+            if(*p == SUBSHELL_COMMAND_CHAR_OPEN)
+              return p;
+          }
+        else
+          {
+            return p;
+          }
+      }
+
+      p--;
+    }
+
+    return NULL;
+}
+
+char*
+get_pivot_token (char *expr)
+{
+  // Search for tokens using lowest precedence first
+  char *token;
+
+  // Checking ';'
+  token = rev_find_token (expr, SEQUENCE_COMMAND);
+
+  // Checking equal precedence '&&' and '||'
+  if(token == NULL)
+    {
+      char *and_token, *or_token;
+
+      and_token = rev_find_token (expr, AND_COMMAND);
+      or_token  = rev_find_token (expr, OR_COMMAND);
+
+      if(and_token != NULL && or_token != NULL)
+        token = (and_token > or_token ? or_token : and_token);
+      else if(and_token == NULL)
+        token = or_token;
+      else
+        token = and_token;
+    }
+
+    // Checking '|'
+    if(token == NULL)
+      token = rev_find_token (expr, PIPE_COMMAND);
+
+    // @todo check '<' and '>'
+
+    // Checking '()'
+    if(token == NULL)
+      token = rev_find_token (expr, SUBSHELL_COMMAND);
+
+    return token;
+}
+
+char**
+split_expression_by_token (char *expr, char token)
+{
+  char *p = expr;
+  size_t size = 1; // At least 1 element exists
+  size_t index = 0;
+
+  while (*p)
+    {
+      if(*p == token)
+        size++;
+
+      p++;
+    }
+
+  char** array = checked_malloc (sizeof (char*) * size);
+
+  p = strtok (expr, &token);
+
+  while (p)
+    {
+      char *new_str = checked_malloc (sizeof (char) * strlen (p));
+      strcpy (new_str, p);
+
+      array[index++] = new_str;
+      p = strtok (NULL, &token);
+    }
+
+  array[index] = NULL;
+
+  return array;
+}
+
 enum command_type
 convert_token_to_command_type (char* token)
 {
