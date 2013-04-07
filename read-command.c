@@ -355,6 +355,12 @@ make_command_stream (int (*get_next_byte) (void *),
 
         if (is_valid_expression (expression_buffer))
           add_expression_to_stream (expression_buffer, expression_stream);
+        else
+        {
+          // @todo better error handling
+          printf("%s\n\n%s", "Something went wrong on:", expression_buffer);
+          exit(0);
+        }
 
         // And reset everything to start again...
         free (expression_buffer);
@@ -386,7 +392,7 @@ add_char_to_expression (char c, char *expr, size_t *expr_utilized, size_t *expr_
 }
 
 bool
-token_ends_at_point(const char *expr, size_t point)
+token_ends_at_point (const char *expr, size_t point)
 {
   if (point == 0) // Can't start with a token.
     return false;
@@ -431,9 +437,142 @@ add_expression_to_stream (const char *expr, command_stream_t stream)
 }
 
 bool
-is_valid_expression (char *expr)
+is_valid_expression (const char *expr)
 {
-  return true; // @todo actually make this do something
+  /**
+   * To validate everything, we'll need to use multiple passes.
+   *
+   * Pass 1:
+   * No Illegal Characters
+   * Alphanumeric and ! % + , - . / : @ ^ _ are allowed
+   * We remove all tokens from the expression, and check for any remaining
+   * illegal characters.
+   *
+   * All tokens must be followed by a word. The exception is
+   * ( ) which may be preceded by or followed by any token.
+   * Two consecutive tokens (even with whitespace) are not allowed.
+   *
+   * Pass 2:
+   * Redirects must follow the proper order. > < is not allowed.
+   * Parenthesis must be matched.
+   */
+
+  char current_char;
+  int i;
+  bool previous_was_token = false;
+
+  enum command_type previous_token_type;
+
+  // We need to pre-crement i here so that current_char is copied correctly
+  // in case we altered i in our loop body.
+  for (i = -1; (current_char = expr[i]) != '\0'; ++i)
+  {
+    // A note: tokens and words do not share any characters.
+    if (is_valid_word_char (current_char))
+    {
+      previous_was_token = false;
+      continue;
+    }
+
+    else if (current_char == NEWLINE_CHAR || current_char == ' ')
+      continue; // White space does not indicate a change of state for validation.
+
+    else if (!previous_was_token)
+    {
+      if (is_valid_token (expr + i))
+      {
+        previous_was_token = true;
+        previous_token_type = convert_token_to_command_type (expr + i);
+
+        switch (previous_token_type)
+        {
+          // For two-character commands, we need to skip the next character
+          case AND_COMMAND:
+          case OR_COMMAND:
+            i+= 1;
+            continue;
+          default:
+            continue; // Move along
+        }
+      }
+
+      else // If there isn't a valid token here, it's not a legal character.
+        return false;
+    }
+
+    else if (previous_was_token)
+    {
+      /**
+       * If the previous character was a token, and this one is not a valid word
+       * character or whitespace (in which case, we wouldn't be here...), it had
+       * better be:
+       *
+       * An open parenthesis (any previous token that isn't a close paren is okay)
+       * Any token if the previous character was a close parenthesis
+       *
+       * Otherwise, this is invalid.
+       */
+
+      // If this isn't a valid token, something is wrong
+      if (!is_valid_token (expr + i))
+        return false;
+
+      enum command_type current_token_type = convert_token_to_command_type (expr + i);
+
+      // Anything is fine (but an open paren) if this is a close paren.
+      if (previous_token_type == SUBSHELL_COMMAND_CHAR_CLOSE && current_token_type != SUBSHELL_COMMAND_CHAR_OPEN)
+        continue;
+
+      // The opposite: anything but a previous close paren is okay if this is an open paren.
+      else if (current_token_type == SUBSHELL_COMMAND_CHAR_OPEN && previous_token_type != SUBSHELL_COMMAND_CHAR_CLOSE)
+        continue;
+
+      // Otherwise, this is invalid so generate an error.
+      return false;
+
+    }
+
+    // If none of these matched, it's definitely invalid.
+    return false;
+  }
+
+  // Ending in a token isn't cool, unless it's a pipeline
+  if (previous_was_token && previous_token_type != PIPE_COMMAND_CHAR)
+    return false;
+
+  /**
+   * Onto step 2!
+   * Here, we check for redirect ordering and parenthesis mismatching.
+   * If we make it through here, we should be okay.
+   */
+
+  return true; // If we reached the end, everything is cool.
+}
+
+bool
+is_valid_word_char (char c)
+{
+  if isalnum(c)
+    return true;
+
+  // While ugly, this is a little more readable than a regex.
+  switch (c)
+  {
+    case '!':
+    case '%':
+    case '+':
+    case ',':
+    case '-':
+    case '.':
+    case '/':
+    case ':':
+    case '@':
+    case '^':
+    case '_':
+      return true;
+    default:
+      return false;
+  }
 }
 
 /**

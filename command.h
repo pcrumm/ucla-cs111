@@ -98,7 +98,7 @@ command_t make_command_from_expression (const char * const expr);
  * Analyzes a given expression string. Returns true if valid, generates the proper
  * error if not.
  */
-bool is_valid_expression (char *expr);
+bool is_valid_expression (const char *expr);
 
 /**
  * Converts the specified expression to a command through make_command_from_expression
@@ -114,4 +114,10 @@ char* add_char_to_expression (char c, char *expr, size_t *expr_utilized, size_t 
 /**
  * Check if the expression consists of a token at the specified point.
  */
-bool token_ends_at_point(const char *expr, size_t point);
+bool token_ends_at_point (const char *expr, size_t point);
+
+/**
+ * Checks if a character is within the word character set:
+ * Alphanum, ! % + , - . / : @ ^ _
+ */
+bool is_valid_word_char (char c);
