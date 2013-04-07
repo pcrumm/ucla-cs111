@@ -279,14 +279,19 @@ make_command_stream (int (*get_next_byte) (void *),
    expression_stream->commands = malloc (expression_stream->alloc_size * sizeof (command_t));
 
    char current_char;
+   int current_line_number = 0;
 
     // Anything between a COMMENT_CHAR and a newline is a comment. We don't write them to our buffer.
    bool in_comment = false;
 
    while ((current_char = get_next_byte (get_next_byte_argument)) != EOF)
    {
+    // If this is a newline and we're not currently adding to a buffer, move on...
+    if (current_char == NEWLINE_CHAR && current_expression_size == 0 && !in_comment)
+      current_line_number++;
+
     // If this is not a newline or a comment, just add it to the buffer...
-    if (current_char != NEWLINE_CHAR && current_char != COMMENT_CHAR && !in_comment)
+    else if (current_char != NEWLINE_CHAR && current_char != COMMENT_CHAR && !in_comment)
       expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
 
     // Comments
@@ -303,6 +308,8 @@ make_command_stream (int (*get_next_byte) (void *),
     // Deal with newlines
     else if (current_char == NEWLINE_CHAR)
     {
+      current_line_number++;
+
       // Firstly, comments: newlines end comments.
       if (in_comment)
       {
@@ -315,9 +322,13 @@ make_command_stream (int (*get_next_byte) (void *),
         expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
 
       // We've found the end of an expression!
-      else if (is_valid_expression (expression_buffer))
+      else
       {
-        add_expression_to_stream (expression_buffer, expression_stream);
+        // Add the terminator...
+        expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
+
+        if (is_valid_expression (expression_buffer))
+          add_expression_to_stream (expression_buffer, expression_stream);
 
         // And reset everything to start again...
         free (expression_buffer);
@@ -336,7 +347,7 @@ char*
 add_char_to_expression (char c, char *expr, size_t *expr_utilized, size_t *expr_size)
 {
   // Simply, add the next character
-  expr[*expr_utilized++] = c;
+  expr[(*expr_utilized)++] = c;
 
   // If we've hit the size limit, time to add another 1024 bytes.
   if (*expr_utilized == *expr_size)
@@ -354,13 +365,13 @@ token_ends_at_point(const char *expr, size_t point)
   if (point == 0) // Can't start with a token.
     return false;
 
-  const char *single_token_location = expr + point;
+  const char *single_token_location = expr + (point - 1);
   if (is_valid_token (single_token_location))
   {
     return true;
   }
 
-  const char *double_token_location = expr + (point - 1);
+  const char *double_token_location = expr + (point - 2);
   if (is_valid_token (double_token_location))
   {
     // Figure out if this is a two-character token
