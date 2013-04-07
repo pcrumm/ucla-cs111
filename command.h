@@ -18,6 +18,8 @@
 typedef struct command *command_t;
 typedef struct command_stream *command_stream_t;
 
+enum command_type;
+
 /* Create a command stream from GETBYTE and ARG.  A reader of
    the command stream will invoke GETBYTE (ARG) to get the next byte.
    GETBYTE will return the next input byte, or a negative number
@@ -49,6 +51,28 @@ bool is_valid_token (char *expr);
  * found, a pointer to the end of the string is returned.
  */
 char* get_next_valid_token (char *expr);
+
+/**
+ * Searches the expression in reverse for the specified token.
+ * A NULL return value indicates token was not found.
+ */
+char* rev_find_token (char *expr, enum command_type type);
+
+/**
+ * Finds and returns a pointer to the right-most lowest precedence operator found
+ * (since same precedence tokens are left-associative).
+ *
+ * Precedence implemented in decending order is:
+ * subshell -> redirect -> pipe -> and/or -> sequence
+ *
+ * A null return value indicates no tokens found (ie SIMPLE_COMMAND).
+ */
+char* get_pivot_token (char *expr);
+
+/**
+ * Splits expr by the specified token and returns an array of char*
+ */
+char** split_expression_by_token (char *expr, char token);
 
 /**
  * Frees all memory associated with a command
