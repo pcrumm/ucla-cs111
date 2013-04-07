@@ -405,7 +405,7 @@ make_command_stream (int (*get_next_byte) (void *),
    expression_stream->commands = checked_malloc (expression_stream->alloc_size * sizeof (command_t));
 
    char current_char;
-   int total_lines_read = 0, current_expr_line_number = 0;
+   int total_lines_read = 0, current_expr_line_number = 1;
 
     // Anything between a COMMENT_CHAR and a newline is a comment. We don't write them to our buffer.
    bool in_comment = false;
@@ -567,7 +567,7 @@ is_valid_expression (const char *expr, int *expr_line_number)
 
   enum command_type previous_token_type;
 
-  *expr_line_number = 0;
+  *expr_line_number = 1;
 
   for (i = 0; (current_char = expr[i]) != '\0' ; ++i)
   {
@@ -657,7 +657,7 @@ is_valid_expression (const char *expr, int *expr_line_number)
 
   size_t num_open_paren = 0, num_close_paren = 0;
 
-  *expr_line_number = 0; // Reset the counter since we're iterating again
+  *expr_line_number = 1; // Reset the counter since we're iterating again
   for (i = 0; (current_char = expr[i]) != '\0'; ++i)
   {
     if (current_char == SUBSHELL_COMMAND_CHAR_OPEN)
