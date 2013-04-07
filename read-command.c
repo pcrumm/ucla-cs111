@@ -122,7 +122,7 @@ rev_find_token (char const *expr, const enum command_type type)
   while (*p)
     p++;
 
-  while (expr >= p)
+  while (p >= expr)
     {
       bool is_valid = is_valid_token (p);
       enum command_type cur_type;
@@ -174,7 +174,7 @@ get_pivot_token (char const *expr)
       or_token  = rev_find_token (expr, OR_COMMAND);
 
       if(and_token != NULL && or_token != NULL)
-        token = (and_token > or_token ? or_token : and_token);
+        token = (and_token > or_token ? and_token : or_token);
       else if(and_token == NULL)
         token = or_token;
       else
@@ -197,13 +197,13 @@ get_pivot_token (char const *expr)
 char**
 split_expression_by_token (char const *expr, char token)
 {
-  char token_string[] = { token };  // strtok expects a NULL delimited string, not just a char
-  char *p;                          // Generic pointer to iterate through characters
-  char *expr_copy;                  // Copy expr as strtok internally modifies strings so we copy expr
-  size_t size = 1;                  // At least 1 element exists
+  char token_string[] = { token, '\0' };  // strtok expects a NULL delimited string, not just a char
+  char *p;                                // Generic pointer to iterate through characters
+  char *expr_copy;                        // Copy expr as strtok internally modifies strings so we copy expr
+  size_t size = 1;                        // At least 1 element exists
   size_t index = 0;
 
-  expr_copy = checked_malloc (sizeof (char) * strlen (expr));
+  expr_copy = checked_malloc (sizeof (char) * (strlen (expr)+1));
   p = strcpy (expr_copy, expr);
 
   while (*p)
@@ -214,13 +214,13 @@ split_expression_by_token (char const *expr, char token)
       p++;
     }
 
-  char** array = checked_malloc (sizeof (char*) * size);
+  char** array = checked_malloc (sizeof (char*) * (size+1));
 
   p = strtok (expr_copy, token_string);
 
   while (p)
     {
-      char *new_str = checked_malloc (sizeof (char) * strlen (p));
+      char *new_str = checked_malloc (sizeof (char) * (strlen (p)+1));
       strcpy (new_str, p);
 
       array[index++] = new_str;
@@ -236,6 +236,9 @@ split_expression_by_token (char const *expr, char token)
 enum command_type
 convert_token_to_command_type (char const *token)
 {
+  if(token == NULL)
+    return SIMPLE_COMMAND;
+
   if(token[0] == token[1] && token[0] == '&')
     return AND_COMMAND;
 
@@ -258,9 +261,106 @@ convert_token_to_command_type (char const *token)
 }
 
 command_t
-make_command_from_expression (const char *expr)
+make_command_from_expression (const char * const expr)
 {
-  return NULL;
+  command_t cmd = checked_malloc (sizeof (struct command));
+
+  char const *token = get_pivot_token (expr);
+  char const *left_string_start;  // Pointers to the beginning of the two possible strings
+  char const *right_string_start;
+
+  char *left_command;       // Formalized string copies which will be sub-parsed
+  char *right_command;
+
+  size_t left_size;
+  size_t right_size;
+
+  enum command_type token_type = convert_token_to_command_type (token);
+  bool large_token = false; // Used to determine character offsets for tokens like '&&' and '||'
+
+  if(token_type == AND_COMMAND || token_type == OR_COMMAND)
+    large_token = true;
+
+  if(token == NULL) // No tokens found, SIMPLE_COMMAND
+    {
+      left_string_start = expr;
+      left_size = strlen(left_string_start) + 1;
+
+      right_string_start = NULL;
+      right_size = 0;
+    }
+  else
+    {
+      left_string_start = expr;
+      left_size = (token - left_string_start) + 1; // Leave space for the null byte
+
+      right_string_start = token + large_token + 1;
+      right_size = strlen(right_string_start) + 1;
+    }
+
+    cmd->input = NULL;
+    cmd->output = NULL;
+    cmd->type = token_type;
+
+    switch (cmd->type)
+      {
+        case SEQUENCE_COMMAND:
+        case OR_COMMAND:
+        case AND_COMMAND:
+        case PIPE_COMMAND:
+          {
+            left_command = checked_malloc (sizeof (char) * left_size);
+            memcpy (left_command, left_string_start, left_size);
+            left_command[left_size-1] = '\0';
+
+            right_command = checked_malloc (sizeof (char) * right_size);
+            strcpy (right_command, right_string_start);
+
+            cmd->u.command[0] = make_command_from_expression (left_command);
+            cmd->u.command[1] = make_command_from_expression (right_command);
+
+            free (left_command);
+            free (right_command);
+            break;
+          }
+        case SUBSHELL_COMMAND:
+          {
+            // @todo handle file redirects
+
+            command_t sub_cmd = checked_malloc (sizeof (struct command));
+            sub_cmd->input = NULL;
+            sub_cmd->output = NULL;
+            sub_cmd->type = SIMPLE_COMMAND;
+
+            left_string_start = token + 1;
+            char const *subshell_close_token = left_string_start;
+
+            // We assume that the expressions are valid this far into the process (ie all subshells
+            // have matching tokens), however, for sanity checks we capture the rest of the string
+            // if the closing token is missing.
+            while (*subshell_close_token != SUBSHELL_COMMAND_CHAR_CLOSE && subshell_close_token != NULL)
+              subshell_close_token++;
+
+            left_size = (subshell_close_token - left_string_start) + 1;
+
+            left_command = checked_malloc (sizeof (char) * left_size);
+            memcpy (left_command, left_string_start, left_size);
+            left_command[left_size-1] = '\0';
+
+            sub_cmd->u.word = split_expression_by_token (left_command, ' ');
+
+            cmd->u.subshell_command = sub_cmd;
+            break;
+          }
+        case SIMPLE_COMMAND:
+          {
+            // @todo handle file redirects
+            cmd->u.word = split_expression_by_token (expr, ' ');
+            break;
+          }
+        default: break;
+      }
+  return cmd;
 }
 
 /**
