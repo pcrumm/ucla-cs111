@@ -305,7 +305,7 @@ make_command_stream (int (*get_next_byte) (void *),
    expression_stream->commands = checked_malloc (expression_stream->alloc_size * sizeof (command_t));
 
    char current_char;
-   int current_line_number = 0;
+   int total_lines_read = 0, current_expr_line_number = 0;
 
     // Anything between a COMMENT_CHAR and a newline is a comment. We don't write them to our buffer.
    bool in_comment = false;
@@ -314,7 +314,7 @@ make_command_stream (int (*get_next_byte) (void *),
    {
     // If this is a newline and we're not currently adding to a buffer, move on...
     if (current_char == NEWLINE_CHAR && current_expression_size == 0 && !in_comment)
-      current_line_number++;
+      current_expr_line_number++;
 
     // If this is not a newline or a comment, just add it to the buffer...
     else if (current_char != NEWLINE_CHAR && current_char != COMMENT_CHAR && !in_comment)
@@ -334,7 +334,7 @@ make_command_stream (int (*get_next_byte) (void *),
     // Deal with newlines
     else if (current_char == NEWLINE_CHAR)
     {
-      current_line_number++;
+      current_expr_line_number++;
 
       // Firstly, comments: newlines end comments.
       if (in_comment)
@@ -353,13 +353,14 @@ make_command_stream (int (*get_next_byte) (void *),
         // Add the terminator...
         expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
 
-        if (is_valid_expression (expression_buffer))
+        if (is_valid_expression (expression_buffer, &current_expression_size))
           add_expression_to_stream (expression_buffer, expression_stream);
+
+        // Display an error message to stderr and exit if there's an error.
         else
         {
-          // @todo better error handling
-          printf("%s\n\n%s", "Something went wrong on:", expression_buffer);
-          exit(0);
+          fprintf (stderr, "%d: Incorrect syntax", total_lines_read + current_expr_line_number);
+          exit (EXIT_FAILURE);
         }
 
         // And reset everything to start again...
@@ -368,6 +369,8 @@ make_command_stream (int (*get_next_byte) (void *),
         current_expression_size = 0;
 
         expression_buffer = checked_malloc (expression_buffer_size * sizeof (char));
+
+        total_lines_read += current_expr_line_number;
       }
     }
    }
@@ -437,7 +440,7 @@ add_expression_to_stream (const char *expr, command_stream_t stream)
 }
 
 bool
-is_valid_expression (const char *expr)
+is_valid_expression (const char *expr, size_t *expr_line_number)
 {
   /**
    * To validate everything, we'll need to use multiple passes.
@@ -453,8 +456,9 @@ is_valid_expression (const char *expr)
    * Two consecutive tokens (even with whitespace) are not allowed.
    *
    * Pass 2:
-   * Redirects must follow the proper order. > < is not allowed.
    * Parenthesis must be matched.
+   *
+   * @todo we must check that redirects are not in an illegal order, i.e. > <
    */
 
   char current_char;
@@ -462,6 +466,8 @@ is_valid_expression (const char *expr)
   bool previous_was_token = false;
 
   enum command_type previous_token_type;
+
+  *expr_line_number = 0;
 
   for (i = 0; (current_char = expr[i]) != '\0' ; ++i)
   {
@@ -473,7 +479,10 @@ is_valid_expression (const char *expr)
     }
 
     else if (current_char == NEWLINE_CHAR || current_char == ' ')
+    {
+      (*expr_line_number) += (current_char == NEWLINE_CHAR) ? 1 : 0;
       continue; // White space does not indicate a change of state for validation.
+    }
 
     else if (!previous_was_token)
     {
@@ -540,11 +549,36 @@ is_valid_expression (const char *expr)
 
   /**
    * Onto step 2!
-   * Here, we check for redirect ordering and parenthesis mismatching.
+   * Here, we check for parenthesis mismatching.
    * If we make it through here, we should be okay.
+   * This could be rolled into the previous loop, but I am keeping it
+   * here for clarity.
    */
 
+  size_t num_open_paren = 0, num_close_paren = 0;
 
+  *expr_line_number = 0; // Reset the counter since we're iterating again
+  for (i = 0; (current_char = expr[i]) != '\0'; ++i)
+  {
+    if (current_char == SUBSHELL_COMMAND_CHAR_OPEN)
+      num_open_paren++;
+
+    else if (current_char == SUBSHELL_COMMAND_CHAR_CLOSE)
+    {
+      num_close_paren++;
+
+      // The number of closing parenthesis should never exceed the number of open ones
+      if (num_close_paren > num_open_paren)
+        return false;
+    }
+
+    else if (current_char == NEWLINE_CHAR)
+      (*expr_line_number)++;
+  }
+
+  // Check for an overall mismatch
+  if (num_open_paren != num_close_paren)
+    return false;
 
   return true; // If we reached the end, everything is cool.
 }

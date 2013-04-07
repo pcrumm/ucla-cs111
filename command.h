@@ -95,10 +95,11 @@ enum command_type convert_token_to_command_type (char const *token);
 command_t make_command_from_expression (const char * const expr);
 
 /**
- * Analyzes a given expression string. Returns true if valid, generates the proper
- * error if not.
+ * Analyzes a given expression string. Returns true if valid, false if not.
+ * If the expression is invalid, we'll also set expr_line_number, which is the
+ * line number /within the expression/ that the error occurred on.
  */
-bool is_valid_expression (const char *expr);
+bool is_valid_expression (const char *expr, size_t *expr_line_number);
 
 /**
  * Converts the specified expression to a command through make_command_from_expression
