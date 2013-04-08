@@ -117,6 +117,7 @@ char const *
 rev_find_token (char const *expr, const enum command_type type)
 {
   char const *p = expr;
+  int subshell_count = 0;
 
   // Find the end of the string
   while (*p)
@@ -131,6 +132,25 @@ rev_find_token (char const *expr, const enum command_type type)
       if(is_valid && *p == PIPE_COMMAND && is_valid_token (p - 1))
           p--;
 
+      // Unless we are looking for subshells, ignore anything inside of them
+      if(type != SUBSHELL_COMMAND && *p == SUBSHELL_COMMAND_CHAR_CLOSE)
+        {
+          subshell_count++;
+
+          while (subshell_count > 0 && p > expr)
+            {
+              p--;
+
+              if(*p == SUBSHELL_COMMAND_CHAR_CLOSE)
+                subshell_count++;
+              else if(*p == SUBSHELL_COMMAND_CHAR_OPEN)
+                subshell_count--;
+            }
+
+            // Move past the outermost '(' token
+            p--;
+        }
+
       cur_type = convert_token_to_command_type (p);
 
       // Return whenever the current token type matches the desired type
@@ -140,7 +160,13 @@ rev_find_token (char const *expr, const enum command_type type)
       {
         if(type == SUBSHELL_COMMAND)
           {
-            if(*p == SUBSHELL_COMMAND_CHAR_OPEN)
+            // We want to make sure the right level of subshell nesting is found
+            if(*p == SUBSHELL_COMMAND_CHAR_CLOSE)
+              subshell_count++;
+            else if(*p == SUBSHELL_COMMAND_CHAR_OPEN)
+              subshell_count--;
+
+            if(subshell_count == 0)
               return p;
           }
         else
@@ -439,31 +465,28 @@ make_command_from_expression (const char * const expr)
         case SUBSHELL_COMMAND:
           {
             // @todo handle file redirects
-            // @todo handle subparsing properly
-
-            command_t sub_cmd = checked_malloc (sizeof (struct command));
-            sub_cmd->input = NULL;
-            sub_cmd->output = NULL;
-            sub_cmd->type = SIMPLE_COMMAND;
-
             left_string_start = token + 1;
-            char const *subshell_close_token = left_string_start;
 
-            // We assume that the expressions are valid this far into the process (ie all subshells
-            // have matching tokens), however, for sanity checks we capture the rest of the string
-            // if the closing token is missing.
-            while (*subshell_close_token != SUBSHELL_COMMAND_CHAR_CLOSE && subshell_close_token != NULL)
-              subshell_close_token++;
+            char const * subshell_close_token = (char const *)left_string_start;
+            int subshell_count = 1;
 
-            left_size = (subshell_close_token - left_string_start) + 1;
+            while (subshell_count > 0 && *subshell_close_token != '\0')
+              {
+                subshell_close_token++;
 
+                if(*subshell_close_token == SUBSHELL_COMMAND_CHAR_OPEN)
+                  subshell_count++;
+                else if(*subshell_close_token == SUBSHELL_COMMAND_CHAR_CLOSE)
+                  subshell_count--;
+              }
+
+            left_size = (subshell_close_token - left_string_start) + 1; // Leave space for NULL byte
             left_command = checked_malloc (sizeof (char) * left_size);
             memcpy (left_command, left_string_start, left_size);
             left_command[left_size-1] = '\0';
 
-            sub_cmd->u.word = split_expression_by_token (left_command, ' ');
-
-            cmd->u.subshell_command = sub_cmd;
+            cmd->u.subshell_command = make_command_from_expression (left_command);
+            free (left_command);
             break;
           }
         case SIMPLE_COMMAND:

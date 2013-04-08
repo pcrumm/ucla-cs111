@@ -10,3 +10,7 @@ Ivan Petkov 704-036-431
 Current Concerns and Limitations:
 
 - Should newlines be copied into expressions or simply replaced with spaces?
+
+- Consecutive '(' tokens will not parse properly, however, the lab spec
+  indicates don't-care behavior for such cases, so the issue won't be fixed
+  unless needed. Consecutive ')' tokens cause no known issues.
