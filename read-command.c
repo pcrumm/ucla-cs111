@@ -544,10 +544,10 @@ make_command_stream (int (*get_next_byte) (void *),
    expression_stream->commands = checked_malloc (expression_stream->alloc_size * sizeof (command_t));
 
    char current_char;
-   int total_lines_read = 0, current_expr_line_number = 1;
+   int total_lines_read = 0, current_expr_line_number = 1, open_paren_count = 0, close_paren_count = 0;
 
     // Anything between a COMMENT_CHAR and a newline is a comment. We don't write them to our buffer.
-   bool in_comment = false, last_char_was_token = true;
+   bool in_comment = false, last_char_was_token = true, last_token_was_close_paren = false;
 
    while ((current_char = get_next_byte (get_next_byte_argument)) != EOF)
    {
@@ -560,6 +560,20 @@ make_command_stream (int (*get_next_byte) (void *),
     {
       last_char_was_token = false;
       expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
+
+      // Increment our parenthesis counters
+      switch (current_char)
+      {
+        case SUBSHELL_COMMAND_CHAR_OPEN:
+          open_paren_count++;
+        case SUBSHELL_COMMAND_CHAR_CLOSE:
+          close_paren_count++;
+          last_token_was_close_paren = true;
+        default:
+          if (token_ends_at_point (expression_buffer, expression_buffer_size))
+            last_token_was_close_paren = false;
+          continue;
+      }
     }
 
     // Comments
@@ -586,14 +600,15 @@ make_command_stream (int (*get_next_byte) (void *),
       }
 
       // Next, handle cases where lines end with tokens. The expression continues.
-      else if (token_ends_at_point (expression_buffer, current_expression_size))
+      else if (token_ends_at_point (expression_buffer, current_expression_size) && !last_token_was_close_paren)
       {
         last_char_was_token = true;
         expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
       }
 
-      // We've found the end of an expression!
-      else if (!last_char_was_token)
+      // We've found the end of an expression! Note we allow expressions to end in tokens
+      // if it's a close paren and we've currently matched parens.
+      else if (!last_char_was_token || (open_paren_count == close_paren_count && last_token_was_close_paren))
       {
         // Add the terminator...
         expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
@@ -618,6 +633,10 @@ make_command_stream (int (*get_next_byte) (void *),
         total_lines_read += current_expr_line_number;
         current_expr_line_number = 1;
       }
+
+      // If all else fails, keep going
+      else
+        expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
     }
    }
 
@@ -625,13 +644,11 @@ make_command_stream (int (*get_next_byte) (void *),
    if (strlen (expression_buffer) > 0)
    {
     if (is_valid_expression (expression_buffer, &current_expr_line_number))
-    add_expression_to_stream (expression_buffer, expression_stream);
+      add_expression_to_stream (expression_buffer, expression_stream);
 
     // Display an error message to stderr and exit if there's an error.
     else
-    {
       show_error(total_lines_read + current_expr_line_number, expression_buffer);
-    }
    }
 
    // Clean up the buffer
