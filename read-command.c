@@ -829,6 +829,10 @@ is_valid_expression (const char *expr, int *expr_line_number)
       else if (last_paren_was_open && current_char == SUBSHELL_COMMAND_CHAR_OPEN)
         continue;
 
+      // Allow an open parenthesis after any token
+      else if (current_char == SUBSHELL_COMMAND_CHAR_OPEN && previous_token_type != SUBSHELL_COMMAND)
+        continue;
+
       // Otherwise, this is invalid so generate an error.
       return false;
     }
