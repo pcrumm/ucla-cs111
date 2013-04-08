@@ -905,6 +905,18 @@ is_valid_expression (const char *expr, int *expr_line_number)
       if (last_paren_was_close && current_char != SUBSHELL_COMMAND_CHAR_OPEN)
       {
         previous_token_type = current_token_type;
+
+        if (current_char == SUBSHELL_COMMAND_CHAR_OPEN)
+        {
+          last_paren_was_open = true;
+          last_paren_was_close = false;
+        }
+        else if (current_char == SUBSHELL_COMMAND_CHAR_CLOSE)
+        {
+          last_paren_was_open = false;
+          last_paren_was_close = true;        
+        }
+
         continue;
       }
 
@@ -912,6 +924,18 @@ is_valid_expression (const char *expr, int *expr_line_number)
       else if (last_paren_was_open && current_char == SUBSHELL_COMMAND_CHAR_OPEN)
       {
         previous_token_type = current_token_type;
+
+        if (current_char == SUBSHELL_COMMAND_CHAR_OPEN)
+        {
+          last_paren_was_open = true;
+          last_paren_was_close = false;
+        }
+        else if (current_char == SUBSHELL_COMMAND_CHAR_CLOSE)
+        {
+          last_paren_was_open = false;
+          last_paren_was_close = true;        
+        }
+
         continue;
       }
 
@@ -919,6 +943,18 @@ is_valid_expression (const char *expr, int *expr_line_number)
       else if (current_char == SUBSHELL_COMMAND_CHAR_OPEN && previous_token_type != SUBSHELL_COMMAND)
       {
         previous_token_type = current_token_type;
+
+        if (current_char == SUBSHELL_COMMAND_CHAR_OPEN)
+        {
+          last_paren_was_open = true;
+          last_paren_was_close = false;
+        }
+        else if (current_char == SUBSHELL_COMMAND_CHAR_CLOSE)
+        {
+          last_paren_was_open = false;
+          last_paren_was_close = true;        
+        }
+        
         continue;
       }
 
