@@ -802,8 +802,8 @@ is_valid_expression (const char *expr, int *expr_line_number)
     return false;
   }
 
-  // Ending in a token isn't cool, unless it's a pipeline
-  if (previous_was_token && previous_token_type != PIPE_COMMAND)
+  // Ending in a token isn't cool, unless it's a pipeline or a close paren
+  if (previous_was_token && previous_token_type != PIPE_COMMAND && previous_token_type != SUBSHELL_COMMAND)
     return false;
 
   /**
