@@ -506,7 +506,7 @@ make_command_stream (int (*get_next_byte) (void *),
    int total_lines_read = 0, current_expr_line_number = 1;
 
     // Anything between a COMMENT_CHAR and a newline is a comment. We don't write them to our buffer.
-   bool in_comment = false;
+   bool in_comment = false, last_char_was_token = true;
 
    while ((current_char = get_next_byte (get_next_byte_argument)) != EOF)
    {
@@ -516,7 +516,10 @@ make_command_stream (int (*get_next_byte) (void *),
 
     // If this is not a newline or a comment, just add it to the buffer...
     else if (current_char != NEWLINE_CHAR && current_char != COMMENT_CHAR && !in_comment)
+    {
+      last_char_was_token = false;
       expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
+    }
 
     // Comments
     else if (current_char == COMMENT_CHAR)
@@ -543,10 +546,13 @@ make_command_stream (int (*get_next_byte) (void *),
 
       // Next, handle cases where lines end with tokens. The expression continues.
       else if (token_ends_at_point (expression_buffer, current_expression_size))
+      {
+        last_char_was_token = true;
         expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
+      }
 
       // We've found the end of an expression!
-      else
+      else if (!last_char_was_token)
       {
         // Add the terminator...
         expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
@@ -557,8 +563,7 @@ make_command_stream (int (*get_next_byte) (void *),
         // Display an error message to stderr and exit if there's an error.
         else
         {
-          fprintf (stderr, "%d: Incorrect syntax: %s", total_lines_read + current_expr_line_number, expression_buffer);
-          exit (EXIT_FAILURE);
+          show_error(total_lines_read + current_expr_line_number, expression_buffer);
         }
 
         // And reset everything to start again...
@@ -567,6 +572,7 @@ make_command_stream (int (*get_next_byte) (void *),
         current_expression_size = 0;
 
         expression_buffer = checked_malloc (expression_buffer_size * sizeof (char));
+        expression_buffer[0] = '\0'; // Make things like strlen safe on the untouched buffer
 
         total_lines_read += current_expr_line_number;
         current_expr_line_number = 1;
@@ -574,7 +580,30 @@ make_command_stream (int (*get_next_byte) (void *),
     }
    }
 
+   // If there was anything extra in our buffer, we need to make sure we add it...
+   if (strlen (expression_buffer) > 0)
+   {
+    if (is_valid_expression (expression_buffer, &current_expr_line_number))
+    add_expression_to_stream (expression_buffer, expression_stream);
+
+    // Display an error message to stderr and exit if there's an error.
+    else
+    {
+      show_error(total_lines_read + current_expr_line_number, expression_buffer);
+    }
+   }
+
+   // Clean up the buffer
+   free (expression_buffer);
+
    return expression_stream;
+}
+
+void
+show_error(int line_number, char *desc)
+{
+  fprintf (stderr, "%d: Incorrect syntax: %s", line_number, desc);
+  exit (EXIT_FAILURE);
 }
 
 char*
@@ -663,6 +692,7 @@ is_valid_expression (const char *expr, int *expr_line_number)
   char current_char;
   int i;
   bool previous_was_token = false;
+  bool previous_was_whitespace = false;
 
   enum command_type previous_token_type;
 
@@ -674,21 +704,38 @@ is_valid_expression (const char *expr, int *expr_line_number)
     if (is_valid_word_char (current_char))
     {
       previous_was_token = false;
+      previous_was_whitespace = false;
       continue;
     }
 
-    else if (current_char == NEWLINE_CHAR || current_char == ' ')
+    else if (current_char == NEWLINE_CHAR)
     {
-      (*expr_line_number) += (current_char == NEWLINE_CHAR) ? 1 : 0;
+      (*expr_line_number)++;
+      previous_was_whitespace = false;
       continue; // White space does not indicate a change of state for validation.
+    }
+
+    else if (current_char == ' ')
+    {
+      if (previous_was_whitespace)
+        return false; // Multiple spaces in a row aren't cool according to the tests
+
+      previous_was_whitespace = true;
+      continue;
     }
 
     else if (!previous_was_token)
     {
+      previous_was_whitespace = false;
+
       if (is_valid_token (expr + i))
       {
         previous_was_token = true;
         previous_token_type = convert_token_to_command_type (expr + i);
+
+        // Remember that the first character can't be any symbol but a parenthesis.
+        if (i == 0 && current_char != SUBSHELL_COMMAND_CHAR_OPEN)
+          return false;
 
         switch (previous_token_type)
         {

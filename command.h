@@ -142,3 +142,8 @@ bool token_ends_at_point (const char *expr, size_t point);
  * Alphanum, ! % + , - . / : @ ^ _
  */
 bool is_valid_word_char (char c);
+
+/**
+ * Write an error to the standard output and exit.
+ */
+void show_error(int line_number, char *desc);
