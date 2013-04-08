@@ -691,8 +691,7 @@ is_valid_expression (const char *expr, int *expr_line_number)
 
   char current_char;
   int i;
-  bool previous_was_token = false;
-  bool previous_was_whitespace = false;
+  bool previous_was_token = false, found_word = false;
 
   enum command_type previous_token_type;
 
@@ -704,39 +703,35 @@ is_valid_expression (const char *expr, int *expr_line_number)
     if (is_valid_word_char (current_char))
     {
       previous_was_token = false;
-      previous_was_whitespace = false;
+      found_word = true;
       continue;
     }
 
     else if (current_char == NEWLINE_CHAR)
     {
       (*expr_line_number)++;
-      previous_was_whitespace = false;
       continue; // White space does not indicate a change of state for validation.
     }
 
     else if (current_char == ' ')
     {
-      if (previous_was_whitespace)
-        return false; // Multiple spaces in a row aren't cool according to the tests
-
-      previous_was_whitespace = true;
       continue;
     }
 
     else if (!previous_was_token)
     {
-      previous_was_whitespace = false;
-
       if (is_valid_token (expr + i))
       {
         previous_was_token = true;
         previous_token_type = convert_token_to_command_type (expr + i);
 
-        // Remember that the first character can't be any symbol but a parenthesis.
-        if (i == 0 && current_char != SUBSHELL_COMMAND_CHAR_OPEN)
+        // Remember that the first real character can't be any symbol but a parenthesis.
+        // Note that not having found a word here indicates that we got here via whitespace,
+        // which is still invalid.
+        if ((i == 0 || !found_word) && current_char != SUBSHELL_COMMAND_CHAR_OPEN)
           return false;
 
+        found_word = true;
         switch (previous_token_type)
         {
           // For two-character commands, we need to skip the next character
