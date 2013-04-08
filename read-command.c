@@ -831,24 +831,51 @@ is_valid_expression (const char *expr, int *expr_line_number)
       switch (current_token_type)
         {
           // For two-character commands, we need to skip the next character
+          // We also reset our paren flags unless this is also a parenthesis.
           case AND_COMMAND:
           case OR_COMMAND:
             i+= 1;
+            last_paren_was_open = false;
+            last_paren_was_close = false;
+            previous_token_type = current_token_type;
+            continue;
+          case SUBSHELL_COMMAND:
+            break; // This is a paren, don't touch the flags
+          case PIPE_COMMAND:
+          case SEQUENCE_COMMAND:
+            // These are okay after a close paren
+            if (last_paren_was_close)
+            {
+              last_paren_was_open = false;
+              last_paren_was_close = false;
+              previous_token_type = current_token_type;
+              continue;
+            }
           default:
-            break; // Move along
+            last_paren_was_open = false;
+            last_paren_was_close = false;
         }
 
       // If the previous character was a close parenthesis, ensure this is not an open parenthesis
       if (last_paren_was_close && current_char != SUBSHELL_COMMAND_CHAR_OPEN)
+      {
+        previous_token_type = current_token_type;
         continue;
+      }
 
       // If the previous token was an open parenthesis, allow only open parenthesis
       else if (last_paren_was_open && current_char == SUBSHELL_COMMAND_CHAR_OPEN)
+      {
+        previous_token_type = current_token_type;
         continue;
+      }
 
       // Allow an open parenthesis after any token
       else if (current_char == SUBSHELL_COMMAND_CHAR_OPEN && previous_token_type != SUBSHELL_COMMAND)
+      {
+        previous_token_type = current_token_type;
         continue;
+      }
 
       // Otherwise, this is invalid so generate an error.
       return false;
