@@ -1,3 +1,12 @@
+UCLA CS 111
+Professor Paul Eggert
+Spring 2013
+
+Lab 1A Time Travel Shell
+
+Phil Crumm
+Ivan Petkov 704-036-431
+
 Current Concerns and Limitations:
 
 - Should newlines be copied into expressions or simply replaced with spaces?
