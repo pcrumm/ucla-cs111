@@ -703,7 +703,7 @@ make_command_stream (int (*get_next_byte) (void *),
 }
 
 void
-show_error(int line_number, char *desc)
+show_error (int line_number, char *desc)
 {
   fprintf (stderr, "%d: Incorrect syntax: %s", line_number, desc);
   exit (EXIT_FAILURE);
@@ -954,7 +954,7 @@ is_valid_expression (const char *expr, int *expr_line_number)
           last_paren_was_open = false;
           last_paren_was_close = true;        
         }
-        
+
         continue;
       }
 
