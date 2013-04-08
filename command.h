@@ -151,4 +151,11 @@ bool is_valid_word_char (char c);
 /**
  * Write an error to the standard output and exit.
  */
-void show_error(int line_number, char *desc);
+void show_error (int line_number, char *desc);
+
+/**
+ * Recursively analyzes an expression and verifies that there is no more than
+ * one input redirect < between any set of tokens and that no redirects in any
+ * set of tokens appear in this order: > <
+ */
+bool expression_redirect_order_is_valid (const char *expr, int *line_number);

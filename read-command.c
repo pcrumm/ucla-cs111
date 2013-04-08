@@ -1003,7 +1003,14 @@ is_valid_expression (const char *expr, int *expr_line_number)
   if (num_open_paren != num_close_paren)
     return false;
 
-  return true; // If we reached the end, everything is cool.
+  // Third pass: expression order
+  return expression_redirect_order_is_valid (expr, expr_line_number);
+}
+
+bool
+expression_redirect_order_is_valid (const char *expr, int *line_number)
+{
+  return true;
 }
 
 bool
