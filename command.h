@@ -89,7 +89,7 @@ char** split_expression_by_token (char const *expr, char token);
  * and the redirects are stripped from the copy. This new (mutable) string is then returned.
  * It is the duty of the caller to free orig_expr at the appropriate time.
  */
-char* handle_and_strip_single_file_redirect (char const * const orig_expr, command_t cmd, char redirect_type);
+char* handle_and_strip_single_file_redirect (char const * const orig_expr, command_t cmd, char redirect_type, bool is_subshell_command);
 
 /**
  * Searches for any file redirects and updates the command struct as appropriate.
@@ -97,7 +97,7 @@ char* handle_and_strip_single_file_redirect (char const * const orig_expr, comma
  * are then removed from the copy, which gets returned. It is the duty of the caller to
  * free expr.
  */
-char* handle_and_strip_file_redirects (char const * const expr, command_t cmd);
+char* handle_and_strip_file_redirects (char const * const expr, command_t cmd, bool is_subshell_command);
 
 /**
  * Frees all memory associated with a command

@@ -278,7 +278,7 @@ split_expression_by_token (char const *expr, char token)
 }
 
 char*
-handle_and_strip_single_file_redirect (char const * const orig_expr, command_t cmd, char redirect_type)
+handle_and_strip_single_file_redirect (char const * const orig_expr, command_t cmd, char redirect_type, bool is_subshell_command)
 {
   if(orig_expr == NULL)
     return NULL;
@@ -311,11 +311,21 @@ handle_and_strip_single_file_redirect (char const * const orig_expr, command_t c
 
   // Search for redirect token token in reverse. If we hit the start of the string
   // it does not exist. The expression would be invalid otherwise.
-  while (*file_token != redirect_type && file_token > expr_copy)
-    file_token--;
+  // In the case of subshells, we only care about redirects outside of the shell.
+  // Internal redirects will be handled when that subshell is being parsed
+  if(is_subshell_command)
+    {
+      while (*file_token != redirect_type && *file_token != SUBSHELL_COMMAND_CHAR_CLOSE && file_token > expr_copy)
+        file_token--;
+    }
+  else
+    {
+      while (*file_token != redirect_type && file_token > expr_copy)
+        file_token--;
+    }
 
   // No redirect found
-  if(file_token == expr_copy)
+  if(file_token == expr_copy || (is_subshell_command && *file_token == SUBSHELL_COMMAND_CHAR_CLOSE) )
     return expr_copy;
 
   // A redirect was found
@@ -359,14 +369,14 @@ handle_and_strip_single_file_redirect (char const * const orig_expr, command_t c
 }
 
 char*
-handle_and_strip_file_redirects (const char const *expr, command_t cmd)
+handle_and_strip_file_redirects (const char const *expr, command_t cmd, bool is_subshell_command)
 {
   char *out_stripped;
   char *in_stripped;
 
-  out_stripped = handle_and_strip_single_file_redirect (expr, cmd, FILE_OUT_CHAR);
+  out_stripped = handle_and_strip_single_file_redirect (expr, cmd, FILE_OUT_CHAR, is_subshell_command);
 
-  in_stripped = handle_and_strip_single_file_redirect (out_stripped, cmd, FILE_IN_CHAR);
+  in_stripped = handle_and_strip_single_file_redirect (out_stripped, cmd, FILE_IN_CHAR, is_subshell_command);
   free (out_stripped);
 
   return in_stripped;
@@ -464,10 +474,17 @@ make_command_from_expression (const char * const expr)
           }
         case SUBSHELL_COMMAND:
           {
-            // @todo handle file redirects
+            char const *subshell_close_token;           // Pointer to the outermost ')' token
+            char const *token_after_subshell_redirects; // Pointer to the next delimiting token after shell
+
+            char *redirect_stripped_subshell;           // String returned from function handling redirects
+            char *subshell_with_redirects;              // Copied string of subshell and characters up to the next token
+                                                        // ie subshell along with any potential redirects applied to it
+            size_t len_subshell_with_redirects;         // The size of subshell_with_redirects
+
             left_string_start = token + 1;
 
-            char const * subshell_close_token = (char const *)left_string_start;
+            subshell_close_token = (char const *)left_string_start;
             int subshell_count = 1;
 
             while (subshell_count > 0 && *subshell_close_token != '\0')
@@ -480,10 +497,39 @@ make_command_from_expression (const char * const expr)
                   subshell_count--;
               }
 
-            left_size = (subshell_close_token - left_string_start) + 1; // Leave space for NULL byte
-            left_command = checked_malloc (sizeof (char) * left_size);
+            // Find the next token that is NOT a file redirect
+            token_after_subshell_redirects = subshell_close_token;
+
+            do
+              {
+                token_after_subshell_redirects = get_next_valid_token (token_after_subshell_redirects);
+              }
+            while (token_after_subshell_redirects != NULL &&
+                  *token_after_subshell_redirects != '\0' &&
+                    ( *token_after_subshell_redirects == FILE_IN_CHAR ||
+                      *token_after_subshell_redirects == FILE_OUT_CHAR   )
+                  );
+
+            // Copy the subshell and any potential redirects into a new string
+            len_subshell_with_redirects = token_after_subshell_redirects - left_string_start + 1;       // Pick up the outermost '(' as well
+            subshell_with_redirects = checked_malloc (sizeof (char) * (len_subshell_with_redirects+1)); // Leave a space for NULL
+            memcpy (subshell_with_redirects, left_string_start-1, len_subshell_with_redirects);         // One char left of left_string_start gets the outermost '(' char
+            subshell_with_redirects[len_subshell_with_redirects] = '\0';
+
+            // Handle redirects
+            redirect_stripped_subshell = handle_and_strip_file_redirects (subshell_with_redirects, cmd, true);
+
+            // Free memory we don't need
+            free (redirect_stripped_subshell);
+            free (subshell_with_redirects);
+            redirect_stripped_subshell = NULL;
+            subshell_with_redirects = NULL;
+
+            // Copy the string within the subshell and subparse it
+            left_size = (subshell_close_token - left_string_start);
+            left_command = checked_malloc (sizeof (char) * (left_size+1)); // Leave space for NULL byte
             memcpy (left_command, left_string_start, left_size);
-            left_command[left_size-1] = '\0';
+            left_command[left_size] = '\0';
 
             cmd->u.subshell_command = make_command_from_expression (left_command);
             free (left_command);
@@ -491,8 +537,7 @@ make_command_from_expression (const char * const expr)
           }
         case SIMPLE_COMMAND:
           {
-            // @todo handle file redirects
-            char *stripped_expr = handle_and_strip_file_redirects (expr, cmd);
+            char *stripped_expr = handle_and_strip_file_redirects (expr, cmd, false);
             cmd->u.word = split_expression_by_token (stripped_expr, ' ');
             free (stripped_expr);
             break;
