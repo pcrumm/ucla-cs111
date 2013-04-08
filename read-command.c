@@ -732,7 +732,7 @@ is_valid_expression (const char *expr, int *expr_line_number)
 
   char current_char;
   int i;
-  bool previous_was_token = false, found_word = false;
+  bool previous_was_token = false, found_word = false, last_paren_was_close = false, last_paren_was_open = true;
 
   enum command_type previous_token_type;
 
@@ -773,6 +773,9 @@ is_valid_expression (const char *expr, int *expr_line_number)
           return false;
 
         found_word = true;
+        last_paren_was_close = (current_char == SUBSHELL_COMMAND_CHAR_CLOSE);
+        last_paren_was_open = (current_char == SUBSHELL_COMMAND_CHAR_OPEN);
+
         switch (previous_token_type)
         {
           // For two-character commands, we need to skip the next character
@@ -796,8 +799,8 @@ is_valid_expression (const char *expr, int *expr_line_number)
        * character or whitespace (in which case, we wouldn't be here...), it had
        * better be:
        *
-       * An open parenthesis (any previous token that isn't a close paren is okay)
-       * Any token if the previous character was a close parenthesis
+       * Any token but an open parenthesis, if the previous token was a close parenthesis.
+       * An open parenthesis, if the previous token was also an open parenthesis.
        *
        * Otherwise, this is invalid.
        */
@@ -808,17 +811,26 @@ is_valid_expression (const char *expr, int *expr_line_number)
 
       enum command_type current_token_type = convert_token_to_command_type (expr + i);
 
-      // Anything is fine (but an open paren) if this is a close paren.
-      if (previous_token_type == SUBSHELL_COMMAND_CHAR_CLOSE && current_token_type != SUBSHELL_COMMAND_CHAR_OPEN)
+      switch (current_token_type)
+        {
+          // For two-character commands, we need to skip the next character
+          case AND_COMMAND:
+          case OR_COMMAND:
+            i+= 1;
+          default:
+            break; // Move along
+        }
+
+      // If the previous character was a close parenthesis, ensure this is not an open parenthesis
+      if (last_paren_was_close && current_char != SUBSHELL_COMMAND_CHAR_OPEN)
         continue;
 
-      // The opposite: anything but a previous close paren is okay if this is an open paren.
-      else if (current_token_type == SUBSHELL_COMMAND_CHAR_OPEN && previous_token_type != SUBSHELL_COMMAND_CHAR_CLOSE)
+      // If the previous token was an open parenthesis, allow only open parenthesis
+      else if (last_paren_was_open && current_char == SUBSHELL_COMMAND_CHAR_OPEN)
         continue;
 
       // Otherwise, this is invalid so generate an error.
       return false;
-
     }
 
     // If none of these matched, it's definitely invalid.
