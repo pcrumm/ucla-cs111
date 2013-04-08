@@ -569,6 +569,7 @@ make_command_stream (int (*get_next_byte) (void *),
         expression_buffer = checked_malloc (expression_buffer_size * sizeof (char));
 
         total_lines_read += current_expr_line_number;
+        current_expr_line_number = 1;
       }
     }
    }
