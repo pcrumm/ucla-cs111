@@ -74,6 +74,11 @@ char const * rev_find_token (char const *expr, const enum command_type type);
 char const * get_pivot_token (char const *expr);
 
 /**
+ * Replaces one character with another within a string
+ */
+void replace_char (char** p_string, char old_char, char new_char);
+
+/**
  * Splits expr by the specified token and returns an array of char*
  */
 char** split_expression_by_token (char const *expr, char token);

@@ -194,6 +194,20 @@ get_pivot_token (char const *expr)
     return token;
 }
 
+void
+replace_char (char** p_string, char old_char, char new_char)
+{
+  char *str = *p_string;
+
+  while (*str != '\0')
+    {
+      if(*str == old_char)
+        *str = new_char;
+
+      str++;
+    }
+}
+
 char**
 split_expression_by_token (char const *expr, char token)
 {
@@ -206,6 +220,10 @@ split_expression_by_token (char const *expr, char token)
   expr_copy = checked_malloc (sizeof (char) * (strlen (expr)+1));
   p = strcpy (expr_copy, expr);
 
+  // Replacing all new lines in the expression
+  replace_char (&expr_copy, '\n', token);
+
+  // Consecutive tokens will result in allocating slightly larger than necessary memory
   while (*p)
     {
       if(*p == token)
