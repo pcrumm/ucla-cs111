@@ -63,7 +63,11 @@ char const * rev_find_token (char const *expr, const enum command_type type);
  * (since same precedence tokens are left-associative).
  *
  * Precedence implemented in decending order is:
- * subshell -> redirect -> pipe -> and/or -> sequence
+ * subshell -> pipe -> and/or -> sequence
+ *
+ * Redirect precedence would come after subshells and before pipes. This function
+ * does not take file redirects into account, as they are better handled when
+ * building SIMPLE_COMMANDs and SUBSHELL_COMMANDs.
  *
  * A null return value indicates no tokens found (ie SIMPLE_COMMAND).
  */
@@ -73,6 +77,22 @@ char const * get_pivot_token (char const *expr);
  * Splits expr by the specified token and returns an array of char*
  */
 char** split_expression_by_token (char const *expr, char token);
+
+/**
+ * Checks for a single redirect token, as specified by redirect_type (which is the
+ * redirect token itself) and updates the command. Then the original expression is copied
+ * and the redirects are stripped from the copy. This new (mutable) string is then returned.
+ * It is the duty of the caller to free orig_expr at the appropriate time.
+ */
+char* handle_and_strip_single_file_redirect (char const * const orig_expr, command_t cmd, char redirect_type);
+
+/**
+ * Searches for any file redirects and updates the command struct as appropriate.
+ * The expression is copied and the redirect tokens and their respective destinations
+ * are then removed from the copy, which gets returned. It is the duty of the caller to
+ * free expr.
+ */
+char* handle_and_strip_file_redirects (char const * const expr, command_t cmd);
 
 /**
  * Frees all memory associated with a command

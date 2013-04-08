@@ -233,6 +233,101 @@ split_expression_by_token (char const *expr, char token)
   return array;
 }
 
+char*
+handle_and_strip_single_file_redirect (char const * const orig_expr, command_t cmd, char redirect_type)
+{
+  if(orig_expr == NULL)
+    return NULL;
+
+  char *expr_copy;            // Local copy of the original expression, used for parsing
+  char *cmd_file;             // Permanent string which will be held by the command struct
+  char *new_expr;             // Stripped version of orig_expression
+
+  char *file_token;           // Pointer to the location of the redirect_token
+  char *file_start;           // Pointer to the start of the redirect name
+  char *file_end;             // Pointer to the end of the redirect name, delimited by space, newline, or end of string
+
+  size_t len_expr;            // Length of the original expression
+  size_t len_cmd_file;        // Length of the redirect name
+  size_t len_before_token;    // Length of the substring up to the redirect token
+  size_t len_after_redirect;  // Length of the substring after then end of the redirect name
+
+  len_expr = (strlen (orig_expr)+1);
+  expr_copy = checked_malloc (sizeof (char) * len_expr);
+  strcpy (expr_copy, orig_expr);
+
+  // If any parameters are invalid, return a copy of the un-edited expression
+  if(cmd == NULL || (redirect_type != FILE_IN_CHAR && redirect_type != FILE_OUT_CHAR))
+    return expr_copy;
+
+  // Find the end of the string
+  file_token = expr_copy;
+  while (*file_token != '\0')
+    file_token++;
+
+  // Search for redirect token token in reverse. If we hit the start of the string
+  // it does not exist. The expression would be invalid otherwise.
+  while (*file_token != redirect_type && file_token > expr_copy)
+    file_token--;
+
+  // No redirect found
+  if(file_token == expr_copy)
+    return expr_copy;
+
+  // A redirect was found
+  // A redirect will start at least one character after the redirect token, possibly separated by whitespace
+  file_start = file_token + 1;
+  while (*file_start == ' ' && *file_start != '\0') // Sanity check for the end of string.
+    file_start++;
+
+  // Something wonky happened...
+  if(*file_start == '\0')
+    return expr_copy;
+
+  // The redirect name will be delimited by whitespace, a newline, or the end of a string (NULL)
+  file_end = file_start;
+  while (*file_end != ' ' && *file_end != NEWLINE_CHAR && *file_end != '\0')
+    file_end++;
+
+  // Copy the redirect name for the command struct
+  len_cmd_file = (file_end - file_start);
+  cmd_file = checked_malloc (sizeof (char) * (len_cmd_file+1)); // Need to leave a space for the NULL byte as well
+  memcpy (cmd_file, file_start, len_cmd_file);
+  cmd_file[len_cmd_file] = '\0';
+
+  if(redirect_type == FILE_IN_CHAR)
+    cmd->input = cmd_file;
+  else // FILE_OUT_CHAR
+    cmd->output = cmd_file;
+
+  // Now we strip the redirect token and name from the strings
+
+  // file_token should come after expr_copy, they won't be the same char
+  len_before_token = (file_token - expr_copy);
+  len_after_redirect = strlen (file_end+1) + 1; // Don't forget the NULL byte
+
+  new_expr = checked_malloc (sizeof (char) * (len_before_token + len_after_redirect));
+  memcpy (new_expr, expr_copy, len_before_token);
+  strcpy (new_expr + len_before_token, file_end);
+
+  free (expr_copy);
+  return new_expr;
+}
+
+char*
+handle_and_strip_file_redirects (const char const *expr, command_t cmd)
+{
+  char *out_stripped;
+  char *in_stripped;
+
+  out_stripped = handle_and_strip_single_file_redirect (expr, cmd, FILE_OUT_CHAR);
+
+  in_stripped = handle_and_strip_single_file_redirect (out_stripped, cmd, FILE_IN_CHAR);
+  free (out_stripped);
+
+  return in_stripped;
+}
+
 enum command_type
 convert_token_to_command_type (char const *token)
 {
@@ -326,6 +421,7 @@ make_command_from_expression (const char * const expr)
         case SUBSHELL_COMMAND:
           {
             // @todo handle file redirects
+            // @todo handle subparsing properly
 
             command_t sub_cmd = checked_malloc (sizeof (struct command));
             sub_cmd->input = NULL;
@@ -355,7 +451,9 @@ make_command_from_expression (const char * const expr)
         case SIMPLE_COMMAND:
           {
             // @todo handle file redirects
-            cmd->u.word = split_expression_by_token (expr, ' ');
+            char *stripped_expr = handle_and_strip_file_redirects (expr, cmd);
+            cmd->u.word = split_expression_by_token (stripped_expr, ' ');
+            free (stripped_expr);
             break;
           }
         default: break;
