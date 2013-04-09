@@ -105,6 +105,12 @@ char* handle_and_strip_file_redirects (char const * const expr, command_t cmd, b
 void free_command (command_t c);
 
 /**
+ * Frees all memory associated with a command_stream, including
+ * all command trees.
+ */
+void free_command_stream (command_stream_t cmd_stream);
+
+/**
  * Converts any char token equivalent of the command_type enum
  * into the enum type. If no token is found SIMPLE_COMMAND is
  * returned. FILE_IN_CHAR and FILE_OUT_CHAR ('<' and '>', respectively)
