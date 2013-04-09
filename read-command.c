@@ -63,6 +63,17 @@ free_command (command_t c)
   free (c);
 }
 
+void
+free_command_stream (command_stream_t cmd_stream)
+{
+  int i;
+  for(i = 0; i < cmd_stream->stream_size; i++)
+    free_command (cmd_stream->commands[i]);
+
+  free (cmd_stream->commands);
+  free (cmd_stream);
+}
+
 bool
 is_valid_token (char const *expr)
 {
