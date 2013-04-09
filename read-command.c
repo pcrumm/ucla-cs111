@@ -1010,6 +1010,155 @@ is_valid_expression (const char *expr, int *expr_line_number)
 bool
 expression_redirect_order_is_valid (const char *expr, int *line_number)
 {
+  /**
+   * Iterate over our expression. We look for the following invalid conditions:
+   * More than one > or <
+   * > < appearing in this order.
+   *
+   * Note that these conditions are reset each time we hit a token. Further, as
+   * soon as we find a subshell, we repeat this search recursively.
+   *
+   * Also:
+   * A < can be preceded by ')' or whitespace or a word.
+   * It MUST have a word after it.
+   * A > can be preceded by ')' or whitespace or a word. 
+   * It MUST have a word after it.
+   */
+
+  char current_char;
+  int open_paren_count = 0, close_paren_count = 0, i = 0;
+
+  size_t subshell_buffer_size = 0;
+  size_t subshell_buffer_max = 1024;
+  char* subshell_buffer = checked_malloc (sizeof (char) * subshell_buffer_max);
+
+  bool last_was_token = false;
+  char last_token_char;
+
+  bool found_in_redirect = false, found_out_redirect = false;
+
+  size_t pre_recursion_linecount = 0;
+
+  for (i = 0; (current_char = expr[i]) != '\0'; i++)
+  {
+    // If it's a space, keep going
+    if (current_char == ' ')
+    {
+      continue;
+    }
+
+    // If it's a newline, increment the line counter and continue
+    else if (current_char == NEWLINE_CHAR)
+    {
+      (*line_number)++;
+      last_was_token = false;
+      continue;
+    }
+
+    // Handle redirect characters
+    else if (current_char == FILE_IN_CHAR)
+    {
+      // No more than one is allowed
+      if (found_in_redirect)
+        return false;
+
+      // This can only be preceded by a ) (within the token set)
+      if (last_was_token && last_token_char != SUBSHELL_COMMAND_CHAR_CLOSE)
+        return false;
+
+      // This can't follow an out redirect
+      if (found_out_redirect)
+        return false;
+
+      found_in_redirect = true;
+      continue;
+    }
+
+    else if (current_char == FILE_OUT_CHAR)
+    {
+      // No more than one is allowed
+      if (found_out_redirect)
+        return false;
+
+       // This can only be preceded by a ) (within the token set)
+      if (last_was_token && last_token_char != SUBSHELL_COMMAND_CHAR_CLOSE)
+        return false;
+
+      found_out_redirect = true;
+      continue;
+    }
+
+    // Handle other tokens
+    else if (token_ends_at_point (expr, (size_t) i))
+    {
+      // If we have a subshell open, we need to look for the end
+      if (current_char == SUBSHELL_COMMAND_CHAR_OPEN)
+      {
+        for (subshell_buffer_size = 0; (current_char = expr[i + subshell_buffer_size + 1]) != '\0'; ++subshell_buffer_size)
+        {
+          // If this is our first iteration, we need to count the first paren
+          if (subshell_buffer_size == 0)
+            open_paren_count = 1;
+
+          // Keep looking until we find the close parenthesis
+          if (current_char == SUBSHELL_COMMAND_CHAR_OPEN)
+            open_paren_count++;
+
+          else if (current_char == SUBSHELL_COMMAND_CHAR_CLOSE)
+          {
+            close_paren_count++;
+
+            // If the count matches, we've found the end!
+            if (open_paren_count == close_paren_count)
+            {
+              pre_recursion_linecount = *line_number;
+
+              // If it's valid, keep moving
+              if (expression_redirect_order_is_valid (expr, line_number))
+              {
+                i += subshell_buffer_size + 1; // To include the close paren
+                last_was_token = true;
+                last_token_char = SUBSHELL_COMMAND_CHAR_CLOSE;
+
+                // Reset the buffer
+                free (subshell_buffer);
+                subshell_buffer = malloc (sizeof (char) * 1024);
+
+                *line_number = pre_recursion_linecount;
+
+                break;
+              }
+
+              // There's an error, so react appropriately
+              else
+              {
+                free (subshell_buffer);
+                return false;
+              }
+            }
+          }
+
+          // If we got this far, nothing special is going to happen, so add to the buffer and move on.
+          subshell_buffer = add_char_to_expression (current_char, subshell_buffer, &subshell_buffer_size, &subshell_buffer_max);
+        }
+      }
+
+      // Otherwise, we're just going to update our token-related stuff and move along
+      else
+      {
+        last_was_token = true;
+        last_token_char = current_char;
+
+        // Reset our pipe information
+        found_in_redirect = false;
+        found_out_redirect = false;
+
+        continue;
+      }
+    }
+  }
+
+  // If we have reached this point, there are no errors.
   return true;
 }
 
