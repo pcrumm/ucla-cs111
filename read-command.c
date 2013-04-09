@@ -1058,6 +1058,13 @@ expression_redirect_order_is_valid (const char *expr, int *line_number)
       continue;
     }
 
+    // If this is a word character, continue on.
+    if (is_valid_word_char (current_char))
+    {
+      last_was_token = false;
+      continue;
+    }
+
     // If it's a newline, increment the line counter and continue
     else if (current_char == NEWLINE_CHAR)
     {
@@ -1100,7 +1107,7 @@ expression_redirect_order_is_valid (const char *expr, int *line_number)
     }
 
     // Handle other tokens
-    else if (token_ends_at_point (expr, (size_t) i))
+    else if (token_ends_at_point (expr, (size_t) (i - 1)))
     {
       // If we have a subshell open, we need to look for the end
       if (current_char == SUBSHELL_COMMAND_CHAR_OPEN)
