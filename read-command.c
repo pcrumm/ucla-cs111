@@ -734,7 +734,9 @@ make_command_stream (int (*get_next_byte) (void *),
 
     // Display an error message to stderr and exit if there's an error.
     else
+    {
       show_error(total_lines_read + current_expr_line_number, expression_buffer);
+    }
    }
 
    // Clean up the buffer
@@ -747,6 +749,7 @@ void
 show_error (int line_number, char *desc)
 {
   fprintf (stderr, "%d: Incorrect syntax: %s", line_number, desc);
+  free (desc);
   exit (EXIT_FAILURE);
 }
 
