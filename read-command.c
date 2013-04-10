@@ -926,6 +926,8 @@ is_valid_expression (const char *expr, int *expr_line_number)
           case SUBSHELL_COMMAND:
             break; // This is a paren, don't touch the flags
           case PIPE_COMMAND:
+            previous_token_type = current_token_type;
+            break;
           case SEQUENCE_COMMAND:
             // These are okay after a close paren
             if (last_paren_was_close)
@@ -936,8 +938,11 @@ is_valid_expression (const char *expr, int *expr_line_number)
               continue;
             }
           default:
-            last_paren_was_open = false;
-            last_paren_was_close = false;
+            if (current_char != FILE_IN_CHAR && current_char != FILE_OUT_CHAR)
+            {
+              last_paren_was_open = false;
+              last_paren_was_close = false;              
+          }
         }
 
       // If the previous character was a close parenthesis, ensure this is not an open parenthesis
