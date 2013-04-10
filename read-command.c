@@ -591,6 +591,7 @@ make_command_stream (int (*get_next_byte) (void *),
 
    // Our buffer that we'll read into.
    char *expression_buffer = checked_malloc (expression_buffer_size * sizeof (char));
+   memset (expression_buffer, '\0', expression_buffer_size * sizeof (char));
 
    // Setup our command stream
    command_stream_t expression_stream = checked_malloc (sizeof (struct command_stream));
@@ -706,7 +707,7 @@ make_command_stream (int (*get_next_byte) (void *),
         current_expression_size = 0;
 
         expression_buffer = checked_malloc (expression_buffer_size * sizeof (char));
-        expression_buffer[0] = '\0'; // Make things like strlen safe on the untouched buffer
+        memset (expression_buffer, '\0', expression_buffer_size * sizeof (char)); // Make things like strlen safe on the untouched buffer
 
         total_lines_read += current_expr_line_number;
         current_expr_line_number = 1;
@@ -760,6 +761,7 @@ add_char_to_expression (char c, char *expr, size_t *expr_utilized, size_t *expr_
   {
     *expr_size += 1024;
     expr = checked_realloc (expr, *expr_size);
+    memset (expr + *expr_utilized, '\0', 1024);
   }
 
   return expr;
