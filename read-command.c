@@ -1143,12 +1143,13 @@ expression_redirect_order_is_valid (const char *expr, int *line_number)
     }
 
     // Handle other tokens
-    else if (token_ends_at_point (expr, (size_t) (i - 1)))
+    else if (is_valid_token (expr + i))
     {
       // If we have a subshell open, we need to look for the end
       if (current_char == SUBSHELL_COMMAND_CHAR_OPEN)
       {
-        for (subshell_buffer_size = 0; (current_char = expr[i + subshell_buffer_size + 1]) != '\0'; ++subshell_buffer_size)
+        int j = 0;
+        for (j = 0; (current_char = expr[i + j + 1]) != '\0'; ++j)
         {
           // If this is our first iteration, we need to count the first paren
           if (subshell_buffer_size == 0)
@@ -1171,7 +1172,7 @@ expression_redirect_order_is_valid (const char *expr, int *line_number)
               // If it's valid, keep moving
               if (expression_redirect_order_is_valid (subshell_buffer, line_number))
               {
-                i += subshell_buffer_size + 1; // To include the close paren
+                i += j + 2; // To include the close paren
                 last_was_token = true;
                 last_token_char = SUBSHELL_COMMAND_CHAR_CLOSE;
 
@@ -1180,6 +1181,12 @@ expression_redirect_order_is_valid (const char *expr, int *line_number)
                 subshell_buffer = malloc (sizeof (char) * 1024);
 
                 *line_number = pre_recursion_linecount;
+
+                found_out_redirect = false;
+                found_in_redirect = false;
+
+                open_paren_count = 0;
+                close_paren_count = 0;
 
                 break;
               }
