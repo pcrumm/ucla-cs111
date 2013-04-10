@@ -727,6 +727,7 @@ make_command_stream (int (*get_next_byte) (void *),
    // If there was anything extra in our buffer, we need to make sure we add it...
    if (strlen (expression_buffer) > 0)
    {
+    expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
     if (is_valid_expression (expression_buffer, &current_expr_line_number))
       add_expression_to_stream (expression_buffer, expression_stream);
 
