@@ -666,11 +666,15 @@ make_command_stream (int (*get_next_byte) (void *),
         current_expr_line_number++;
 
       // Firstly, comments: newlines end comments.
-      if (in_comment)
+      if (in_comment && current_char != SEQUENCE_COMMAND_CHAR)
       {
         expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
         in_comment = false;
       }
+
+      // If we're in a comment and it's a sequence, keep going
+      else if (in_comment && current_char == SEQUENCE_COMMAND_CHAR)
+        continue;
 
       // Next, handle cases where lines end with tokens. The expression continues.
       else if (token_ends_at_point (expression_buffer, current_expression_size) && !last_token_was_close_paren)
