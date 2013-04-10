@@ -28,6 +28,8 @@ c && ( (a) || b )
 c && d || ( a && ( ( c ; d ) | e > out ) > out2 ) > out3 | f < in2
 
 a || b && c | d && e || f
+
+( (a||(b)|( (c)|f))||c&&( ( (a)||b)))
 EOF
 
 cat >test.exp <<'EOF'
@@ -137,6 +139,36 @@ cat >test.exp <<'EOF'
       e \
   ||
     f
+# 12
+  (
+       (
+          a \
+        ||
+            (
+             b
+            ) \
+          |
+            (
+               (
+                c
+               ) \
+             |
+               f
+            )
+       ) \
+     ||
+       c \
+   &&
+     (
+      (
+         (
+          a
+         ) \
+       ||
+         b
+      )
+     )
+  )
 EOF
 
 ../timetrash -p test.sh >test.out 2>test.err || ( echo "there were errors running $0: maybe an invalid syntax error was found" ; exit )
