@@ -603,7 +603,7 @@ make_command_stream (int (*get_next_byte) (void *),
    int total_lines_read = 0, current_expr_line_number = 1, open_paren_count = 0, close_paren_count = 0;
 
     // Anything between a COMMENT_CHAR and a newline is a comment. We don't write them to our buffer.
-   bool in_comment = false, last_char_was_token = true, last_token_was_close_paren = false;
+   bool in_comment = false, last_char_was_token = true, last_token_was_close_paren = false, last_was_word = false, seen_word = false;
 
    while ((current_char = get_next_byte (get_next_byte_argument)) != EOF)
    {
@@ -612,9 +612,15 @@ make_command_stream (int (*get_next_byte) (void *),
       current_expr_line_number++;
 
     // If this is not a newline or a comment, just add it to the buffer...
-    else if (current_char != NEWLINE_CHAR && current_char != COMMENT_CHAR && !in_comment)
+    else if (current_char != NEWLINE_CHAR && current_char != COMMENT_CHAR && !in_comment && (current_char != SEQUENCE_COMMAND_CHAR || open_paren_count != close_paren_count ))
     {
       last_char_was_token = false;
+
+      if (is_valid_word_char (current_char))
+        seen_word = true;
+
+      last_was_word = (current_char != ' ');
+
       expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
 
       // Increment our parenthesis counters
@@ -622,12 +628,22 @@ make_command_stream (int (*get_next_byte) (void *),
       {
         case SUBSHELL_COMMAND_CHAR_OPEN:
           open_paren_count++;
+          last_char_was_token = false;
+          last_was_word = false;
+          continue;
         case SUBSHELL_COMMAND_CHAR_CLOSE:
           close_paren_count++;
           last_token_was_close_paren = true;
+          last_char_was_token = false;
+          last_was_word = false;
+          continue;
         default:
           if (token_ends_at_point (expression_buffer, expression_buffer_size))
+          {
             last_token_was_close_paren = false;
+            last_char_was_token = true;
+            last_was_word = false;
+          }
           continue;
       }
     }
@@ -644,9 +660,10 @@ make_command_stream (int (*get_next_byte) (void *),
     }
 
     // Deal with newlines
-    else if (current_char == NEWLINE_CHAR)
+    else if (current_char == NEWLINE_CHAR || (current_char == SEQUENCE_COMMAND_CHAR && open_paren_count == close_paren_count))
     {
-      current_expr_line_number++;
+      if (current_char == NEWLINE_CHAR)
+        current_expr_line_number++;
 
       // Firstly, comments: newlines end comments.
       if (in_comment)
@@ -663,8 +680,9 @@ make_command_stream (int (*get_next_byte) (void *),
       }
 
       // We've found the end of an expression! Note we allow expressions to end in tokens
-      // if it's a close paren and we've currently matched parens.
-      else if (!last_char_was_token || (open_paren_count == close_paren_count && last_token_was_close_paren))
+      // if it's a close paren and we've currently matched parens. We will also continue if we've
+      // gotten this far and we've reached a semicolon.
+      else if ((!last_char_was_token && seen_word) || (open_paren_count == close_paren_count && last_token_was_close_paren) || (current_char == SEQUENCE_COMMAND_CHAR && open_paren_count == close_paren_count && last_was_word))
       {
         // Add the terminator...
         expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
@@ -688,6 +706,12 @@ make_command_stream (int (*get_next_byte) (void *),
 
         total_lines_read += current_expr_line_number;
         current_expr_line_number = 1;
+
+        open_paren_count = 0;
+        close_paren_count = 0;
+
+        last_was_word = false;
+        seen_word = false;
       }
 
       // If all else fails, keep going
