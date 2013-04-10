@@ -698,6 +698,7 @@ make_command_stream (int (*get_next_byte) (void *),
         // Display an error message to stderr and exit if there's an error.
         else
         {
+          free_command_stream (expression_stream);
           show_error(total_lines_read + current_expr_line_number, expression_buffer);
         }
 
@@ -735,6 +736,7 @@ make_command_stream (int (*get_next_byte) (void *),
     // Display an error message to stderr and exit if there's an error.
     else
     {
+      free_command_stream (expression_stream);
       show_error(total_lines_read + current_expr_line_number, expression_buffer);
     }
    }
