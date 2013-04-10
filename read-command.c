@@ -1155,8 +1155,9 @@ expression_redirect_order_is_valid (const char *expr, int *line_number)
             {
               pre_recursion_linecount = *line_number;
 
+              subshell_buffer = add_char_to_expression ('\0', subshell_buffer, &subshell_buffer_size, &subshell_buffer_max);
               // If it's valid, keep moving
-              if (expression_redirect_order_is_valid (expr, line_number))
+              if (expression_redirect_order_is_valid (subshell_buffer, line_number))
               {
                 i += subshell_buffer_size + 1; // To include the close paren
                 last_was_token = true;
