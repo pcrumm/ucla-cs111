@@ -33,4 +33,7 @@ struct command
     // for SUBSHELL_COMMAND:
     struct command *subshell_command;
   } u;
+
+  // The line number the command starts on. Useful for parse errors.
+  int line_number;
 };

@@ -123,7 +123,7 @@ enum command_type convert_token_to_command_type (char const *token);
  * It assumes that input expressions are valid, thus validation checks should
  * be performed outside.
  */
-command_t make_command_from_expression (const char * const expr);
+command_t make_command_from_expression (const char * const expr, int line_number);
 
 /**
  * Analyzes a given expression string. Returns true if valid, false if not.
@@ -136,7 +136,7 @@ bool is_valid_expression (const char *expr, int *expr_line_number);
  * Converts the specified expression to a command through make_command_from_expression
  * and adds it to the specified command stream.
  */
-void add_expression_to_stream (const char *expr, command_stream_t stream);
+void add_expression_to_stream (const char *expr, command_stream_t stream, int line_number);
 
 /**
  * Add the given string to the expression buffer and resize the buffer if necessary.

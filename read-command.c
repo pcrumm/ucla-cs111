@@ -421,7 +421,7 @@ convert_token_to_command_type (char const *token)
 }
 
 command_t
-make_command_from_expression (const char * const expr)
+make_command_from_expression (const char * const expr, int line_number)
 {
   command_t cmd = checked_malloc (sizeof (struct command));
 
@@ -693,7 +693,7 @@ make_command_stream (int (*get_next_byte) (void *),
         expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
 
         if (is_valid_expression (expression_buffer, &current_expr_line_number))
-          add_expression_to_stream (expression_buffer, expression_stream);
+          add_expression_to_stream (expression_buffer, expression_stream, total_lines_read);
 
         // Display an error message to stderr and exit if there's an error.
         else
@@ -731,7 +731,7 @@ make_command_stream (int (*get_next_byte) (void *),
    {
     expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
     if (is_valid_expression (expression_buffer, &current_expr_line_number))
-      add_expression_to_stream (expression_buffer, expression_stream);
+      add_expression_to_stream (expression_buffer, expression_stream, total_lines_read);
 
     // Display an error message to stderr and exit if there's an error.
     else
@@ -805,9 +805,9 @@ token_ends_at_point (const char *expr, size_t point)
 }
 
 void
-add_expression_to_stream (const char *expr, command_stream_t stream)
+add_expression_to_stream (const char *expr, command_stream_t stream, int line_number)
 {
-  stream->commands[stream->stream_size++] = make_command_from_expression (expr);
+  stream->commands[stream->stream_size++] = make_command_from_expression (expr, line_number);
 
   // Resize if we need to
   if (stream->stream_size == stream->alloc_size)
