@@ -232,21 +232,7 @@ get_pivot_token (char const *expr)
 }
 
 void
-replace_char (char** p_string, char old_char, char new_char)
-{
-  char *str = *p_string;
-
-  while (*str != '\0')
-    {
-      if(*str == old_char)
-        *str = new_char;
-
-      str++;
-    }
-}
-
-char**
-split_expression_by_token (char const *expr, char token)
+split_expression_by_token (command_t cmd, char const *expr, char token, int * const p_line_number)
 {
   char token_string[] = { token, '\0' };  // strtok expects a NULL delimited string, not just a char
   char *p;                                // Generic pointer to iterate through characters
@@ -257,8 +243,39 @@ split_expression_by_token (char const *expr, char token)
   expr_copy = checked_malloc (sizeof (char) * (strlen (expr)+1));
   p = strcpy (expr_copy, expr);
 
-  // Replacing all new lines in the expression
-  replace_char (&expr_copy, '\n', token);
+  // Skip through all tokens while replacing newlines until the first word is found
+  while((*p == token || *p == NEWLINE_CHAR) && *p != '\0')
+    {
+      if(*p == NEWLINE_CHAR)
+        {
+          (*p_line_number)++;
+          *p = token;
+        }
+
+        p++;
+    }
+
+  // Set the line number for the command
+  cmd->line_number = *p_line_number;
+
+  // Fast-forward to end of string
+  while(*p)
+    p++;
+
+  // Count up the remaining newlines after the end of all words
+  while((*p == token || *p == NEWLINE_CHAR) && p > expr_copy)
+    {
+      if(*p == NEWLINE_CHAR)
+        {
+          (*p_line_number)++;
+          *p = token;
+        }
+
+        p--;
+    }
+
+  // Reset pointer to start of string
+  p = expr_copy;
 
   // Consecutive tokens will result in allocating slightly larger than necessary memory
   while (*p)
@@ -283,9 +300,9 @@ split_expression_by_token (char const *expr, char token)
     }
 
   array[index] = NULL;
+  cmd->u.word  = array;
 
   free (expr_copy);
-  return array;
 }
 
 char*
@@ -423,6 +440,13 @@ convert_token_to_command_type (char const *token)
 command_t
 make_command_from_expression (const char * const expr, int line_number)
 {
+  // line_number is copied by value, so it's safe to modify it
+  return recursive_build_command_from_expression(expr, &line_number);
+}
+
+command_t
+recursive_build_command_from_expression (const char * const expr, int * const p_line_number)
+{
   command_t cmd = checked_malloc (sizeof (struct command));
 
   char const *token = get_pivot_token (expr);
@@ -476,8 +500,8 @@ make_command_from_expression (const char * const expr, int line_number)
             right_command = checked_malloc (sizeof (char) * right_size);
             strcpy (right_command, right_string_start);
 
-            cmd->u.command[0] = make_command_from_expression (left_command);
-            cmd->u.command[1] = make_command_from_expression (right_command);
+            cmd->u.command[0] = recursive_build_command_from_expression (left_command, p_line_number);
+            cmd->u.command[1] = recursive_build_command_from_expression (right_command, p_line_number);
 
             free (left_command);
             free (right_command);
@@ -542,15 +566,14 @@ make_command_from_expression (const char * const expr, int line_number)
             memcpy (left_command, left_string_start, left_size);
             left_command[left_size] = '\0';
 
-            cmd->u.subshell_command = make_command_from_expression (left_command);
+            cmd->u.subshell_command = recursive_build_command_from_expression (left_command, p_line_number);
             free (left_command);
             break;
           }
         case SIMPLE_COMMAND:
           {
             char *stripped_expr = handle_and_strip_file_redirects (expr, cmd, false);
-            cmd->u.word = split_expression_by_token (stripped_expr, ' ');
-            free (stripped_expr);
+            split_expression_by_token (cmd, stripped_expr, ' ', p_line_number);
             break;
           }
         default: break;
@@ -807,7 +830,7 @@ token_ends_at_point (const char *expr, size_t point)
 void
 add_expression_to_stream (const char *expr, command_stream_t stream, int line_number)
 {
-  stream->commands[stream->stream_size++] = make_command_from_expression (expr, line_number);
+  stream->commands[stream->stream_size++] = make_command_from_expression (expr, line_number+1);
 
   // Resize if we need to
   if (stream->stream_size == stream->alloc_size)
