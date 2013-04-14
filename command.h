@@ -186,7 +186,7 @@ bool expression_redirect_order_is_valid (const char *expr, int *line_number);
  * c for the exit code as well), and set output to the output to standard
  * out, if any.
  */
-int execute_simple_command (command_t c, char **output, bool in_subshell);
+void execute_simple_command (command_t c, char **output, bool in_subshell);
 
 /**
  * Searches the current working directory, then the system path, for the
