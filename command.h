@@ -31,7 +31,7 @@ command_stream_t make_command_stream (int (*getbyte) (void *), void *arg);
 command_t read_command_stream (command_stream_t stream);
 
 /* Print a command to stdout, for debugging.  */
-void print_command (command_t, bool print_lines);
+void print_command (command_t);
 
 /* Execute a command.  Use "time travel" if the flag is set.  */
 void execute_command (command_t, bool);
@@ -165,3 +165,16 @@ void show_error (int line_number, char *desc);
  * set of tokens appear in this order: > <
  */
 bool expression_redirect_order_is_valid (const char *expr, int *line_number);
+
+/**
+ * EXECUTION
+ */
+
+/**
+ * Executes a simple command. If the command cannot be executed, we will
+ * display an error and call exit--the program will not return to the caller.
+ * Otherwise, we return the exit code, for convenience (and modify the passed
+ * c for the exit code as well), and set output to the output to standard
+ * out, if any.
+ */
+int execute_simple_command (command_t c, char **output, bool in_subshell);
