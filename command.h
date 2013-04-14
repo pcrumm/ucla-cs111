@@ -178,3 +178,13 @@ bool expression_redirect_order_is_valid (const char *expr, int *line_number);
  * out, if any.
  */
 int execute_simple_command (command_t c, char **output, bool in_subshell);
+
+/**
+ * Searches the current working directory, then the system path, for the
+ * specified binary. Returns an empty string if we aren't able to find
+ * what we're looking for.
+ *
+ * If an absolute or relative path is specified (preced by / or ., respectively),
+ * we do no searching and simply check if the file exists.
+ */
+char* get_executable_path (char* bin_name);
