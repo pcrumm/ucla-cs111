@@ -31,7 +31,7 @@ command_stream_t make_command_stream (int (*getbyte) (void *), void *arg);
 command_t read_command_stream (command_stream_t stream);
 
 /* Print a command to stdout, for debugging.  */
-void print_command (command_t);
+void print_command (command_t, bool print_lines);
 
 /* Execute a command.  Use "time travel" if the flag is set.  */
 void execute_command (command_t, bool);

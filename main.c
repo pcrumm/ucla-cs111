@@ -28,13 +28,15 @@ main (int argc, char **argv)
   int command_number = 1;
   bool print_tree = false;
   bool time_travel = false;
+  bool print_lines = false;
   program_name = argv[0];
 
   for (;;)
-    switch (getopt (argc, argv, "pt"))
+    switch (getopt (argc, argv, "ptn"))
       {
       case 'p': print_tree = true; break;
       case 't': time_travel = true; break;
+      case 'n': print_lines = true; break;
       default: usage (); break;
       case -1: goto options_exhausted;
       }
@@ -58,7 +60,7 @@ main (int argc, char **argv)
       if (print_tree)
 	{
 	  printf ("# %d\n", command_number++);
-	  print_command (command);
+	  print_command (command, print_lines);
 	}
       else
 	{
