@@ -624,7 +624,7 @@ make_command_stream (int (*get_next_byte) (void *),
    expression_stream->commands = checked_malloc (expression_stream->alloc_size * sizeof (command_t));
 
    char current_char;
-   int total_lines_read = 0, current_expr_line_number = 1, open_paren_count = 0, close_paren_count = 0;
+   int total_lines_read = 0, current_lines_read = 0, open_paren_count = 0, close_paren_count = 0, error_line = 0;
 
     // Anything between a COMMENT_CHAR and a newline is a comment. We don't write them to our buffer.
    bool in_comment = false, last_char_was_token = true, last_token_was_close_paren = false, last_was_word = false, seen_word = false;
@@ -633,7 +633,10 @@ make_command_stream (int (*get_next_byte) (void *),
    {
     // If this is a newline and we're not currently adding to a buffer, move on...
     if (current_char == NEWLINE_CHAR && current_expression_size == 0 && !in_comment)
-      current_expr_line_number++;
+    {
+      total_lines_read++;
+      continue;
+    }
 
     // If this is not a newline or a comment, just add it to the buffer...
     else if (current_char != NEWLINE_CHAR && current_char != COMMENT_CHAR && !in_comment && (current_char != SEQUENCE_COMMAND_CHAR || open_paren_count != close_paren_count ))
@@ -687,7 +690,7 @@ make_command_stream (int (*get_next_byte) (void *),
     else if (current_char == NEWLINE_CHAR || (current_char == SEQUENCE_COMMAND_CHAR && open_paren_count == close_paren_count))
     {
       if (current_char == NEWLINE_CHAR)
-        current_expr_line_number++;
+        current_lines_read++;
 
       // Firstly, comments: newlines end comments.
       if (in_comment && current_char != SEQUENCE_COMMAND_CHAR)
@@ -715,14 +718,14 @@ make_command_stream (int (*get_next_byte) (void *),
         // Add the terminator...
         expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
 
-        if (is_valid_expression (expression_buffer, &current_expr_line_number))
+        if (is_valid_expression (expression_buffer, &error_line))
           add_expression_to_stream (expression_buffer, expression_stream, total_lines_read);
 
         // Display an error message to stderr and exit if there's an error.
         else
         {
           free_command_stream (expression_stream);
-          show_error(total_lines_read + current_expr_line_number, expression_buffer);
+          show_error(total_lines_read + error_line, expression_buffer);
         }
 
         // And reset everything to start again...
@@ -733,8 +736,10 @@ make_command_stream (int (*get_next_byte) (void *),
         expression_buffer = checked_malloc (expression_buffer_size * sizeof (char));
         memset (expression_buffer, '\0', expression_buffer_size * sizeof (char)); // Make things like strlen safe on the untouched buffer
 
-        total_lines_read += current_expr_line_number;
-        current_expr_line_number = 1;
+        total_lines_read += current_lines_read;
+
+        error_line = 0;
+        current_lines_read = 0;
 
         open_paren_count = 0;
         close_paren_count = 0;
@@ -753,14 +758,14 @@ make_command_stream (int (*get_next_byte) (void *),
    if (strlen (expression_buffer) > 0)
    {
     expression_buffer = add_char_to_expression ('\0', expression_buffer, &current_expression_size, &expression_buffer_size);
-    if (is_valid_expression (expression_buffer, &current_expr_line_number))
+    if (is_valid_expression (expression_buffer, &error_line))
       add_expression_to_stream (expression_buffer, expression_stream, total_lines_read);
 
     // Display an error message to stderr and exit if there's an error.
     else
     {
       free_command_stream (expression_stream);
-      show_error(total_lines_read + current_expr_line_number, expression_buffer);
+      show_error(total_lines_read + error_line, expression_buffer);
     }
    }
 

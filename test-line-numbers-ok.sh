@@ -69,7 +69,7 @@ cat >test.exp <<'EOF'
   &&
  (line: 15)      f \
     |
- (line: 20)      g<h
+ (line: 17)      g<h
 # 8
  (line: 20)    a<b>c \
   |
