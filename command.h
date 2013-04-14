@@ -31,7 +31,7 @@ command_stream_t make_command_stream (int (*getbyte) (void *), void *arg);
 command_t read_command_stream (command_stream_t stream);
 
 /* Print a command to stdout, for debugging.  */
-void print_command (command_t);
+void print_command (command_t, bool);
 
 /* Execute a command.  Use "time travel" if the flag is set.  */
 void execute_command (command_t, bool);
@@ -74,14 +74,14 @@ char const * rev_find_token (char const *expr, const enum command_type type);
 char const * get_pivot_token (char const *expr);
 
 /**
- * Replaces one character with another within a string
+ * Splits expr by the specified token and sets cmd->u.word. Additionally it will
+ * increment the line number count based on any encountered newline characters.
+ * Since newlines can only be valid between a token and a word (i.e. before the start
+ * of any words in this context) or after the end of all words (i.e. after the last
+ * word in this context) these locations are the only ones checked. Otherwise it is
+ * up to the validation phase to handle improper newlines.
  */
-void replace_char (char** p_string, char old_char, char new_char);
-
-/**
- * Splits expr by the specified token and returns an array of char*
- */
-char** split_expression_by_token (char const *expr, char token);
+void split_expression_by_token (command_t cmd, char const *expr, char token, int * const p_line_number);
 
 /**
  * Checks for a single redirect token, as specified by redirect_type (which is the
@@ -121,7 +121,16 @@ enum command_type convert_token_to_command_type (char const *token);
 /**
  * Recursively analyses expression and builds the nested command_t structs.
  * It assumes that input expressions are valid, thus validation checks should
- * be performed outside.
+ * be performed outside. It accepts a pointer to a integer used for tracking
+ * which line a command is found. Since the function is recursive, it is the
+ * caller's duty to provide a non-NULL location for the counter.
+ */
+command_t recursive_build_command_from_expression (const char * const expr, int * const p_line_number);
+
+/**
+ * Builds a command tree from an expression. A public wrapper function
+ * for recursive_build_command_from_expression which hosts the location
+ * for the line_number counter.
  */
 command_t make_command_from_expression (const char * const expr, int line_number);
 
