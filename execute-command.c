@@ -10,31 +10,172 @@
 #include <string.h>
 #include <stdlib.h>
 
-
-/* FIXME: You may need to add #include directives, macro definitions,
-   static function definitions, etc.  */
-
 int
 command_status (command_t c)
 {
   return c->status;
 }
 
-void
-execute_command (command_t c, bool time_travel)
+char *
+copy_buffer (const char * const buffer)
 {
-  /* FIXME: Replace this with your implementation.  You may need to
-     add auxiliary functions and otherwise modify the source code.
-     You can also use external functions defined in the GNU C Library.  */
+  if(buffer == NULL)
+    return NULL;
 
-  // "Use" the arguments to avoid compiler warnings until implemented
-  (void)c;
-  (void)time_travel;
-  error (1, 0, "command execution not yet implemented");
+  size_t len_copy = strlen (buffer) + 1;
+  char *copy = checked_malloc (sizeof (char) * len_copy);
+  strcpy (copy, buffer);
+
+  return copy;
+}
+
+char*
+copy_and_concat_buffers (const char * const buff_one, const char * const buff_two)
+{
+  if(buff_one == NULL && buff_two == NULL)
+    return NULL;
+  else if(buff_one == NULL)
+    return copy_buffer (buff_two);
+  else if(buff_two == NULL)
+    return copy_buffer (buff_one);
+
+  size_t len_buff_one = strlen (buff_one);
+  size_t len_buff_two = strlen (buff_two);
+
+  size_t len_concat = len_buff_one + len_buff_two + 1;
+
+  char *concat = checked_malloc (sizeof (char) * len_concat);
+
+  memcpy (concat, buff_one, len_buff_one);
+
+  // Overwrite the EOF from the first buffer, and don't forget to copy the NULL byte from buff_two
+  memcpy (concat + len_buff_one - 1, buff_two, len_buff_two+1);
+
+  return concat;
 }
 
 void
-execute_simple_command (command_t c, char **output, bool in_subshell)
+recursive_execute_command (command_t c, bool time_travel, bool is_subshell)
+{
+  // Ignore time travel for subshells
+  time_travel = (is_subshell ? false : time_travel);
+
+  // Copy any stdin down to children
+  switch (c->type)
+    {
+      case SEQUENCE_COMMAND:
+      case AND_COMMAND:
+      case OR_COMMAND:
+      case PIPE_COMMAND:
+        c->u.command[0]->stdin = copy_buffer (c->stdin);
+        break;
+      case SUBSHELL_COMMAND:
+        c->u.subshell_command->stdin = copy_buffer (c->stdin);
+        break;
+      case SIMPLE_COMMAND: break;
+      default: break;
+    }
+
+  // Execute commands based on tokens and properly set the status up the tree
+  switch (c->type)
+    {
+      case SEQUENCE_COMMAND:
+        // Status of SEQUENCE_COMMAND is based on last executed command
+        recursive_execute_command (c->u.command[0], time_travel, is_subshell);
+        recursive_execute_command (c->u.command[1], time_travel, is_subshell);
+        c->status = c->u.command[1]->status;
+        break;
+
+      case SUBSHELL_COMMAND:
+        // Status of SUBSHELL_COMMAND is the same as the command inside it
+        recursive_execute_command (c->u.subshell_command, time_travel, true);
+        c->status = c->u.subshell_command->status;
+        break;
+
+      case AND_COMMAND:
+        // Status of AND_COMMAND is either the first failed command, or the last executed
+        recursive_execute_command (c->u.command[0], time_travel, is_subshell);
+        if(c->u.command[0]->status == 0)
+          {
+            recursive_execute_command (c->u.command[1], time_travel, is_subshell);
+            c->status = c->u.command[1]->status;
+          }
+        else // first command has NOT exited successfully
+          {
+           c->status = c->u.command[0]->status;
+          }
+        break;
+
+      case OR_COMMAND:
+        // Status of OR_COMMAND is either the first successful command, or the last executed
+        recursive_execute_command (c->u.command[0], time_travel, is_subshell);
+        if(c->u.command[0]->status == 0)
+          {
+            c->status = c->u.command[0]->status;
+          }
+        else
+          {
+            recursive_execute_command (c->u.command[1], time_travel, is_subshell);
+            c->status = c->u.command[1]->status;
+          }
+          break;
+
+        case PIPE_COMMAND:
+          recursive_execute_command (c->u.command[0], time_travel, is_subshell);
+          c->u.command[1]->stdin = c->u.command[0]->stdout; // "Pipe" the output of the first command
+
+          recursive_execute_command (c->u.command[1], time_travel, is_subshell);
+          c->status = c->u.command[1]->status;
+          break;
+
+        case SIMPLE_COMMAND:
+          execute_simple_command (c);
+          break;
+
+        default: break;
+    }
+
+  // Set the stdout from the children
+  switch (c->type)
+    {
+      case SEQUENCE_COMMAND:
+      case AND_COMMAND:
+      case OR_COMMAND:
+        // A single command has been run
+        if( (c->u.command[0]->status != 0 && c->type == AND_COMMAND) ||
+            (c->u.command[0]->status == 0 && c->type == OR_COMMAND)  )
+          c->stdout = copy_buffer (c->u.command[0]->stdout);
+
+        // Both commands have run and within subshell
+        else if(is_subshell)
+          c->stdout = copy_and_concat_buffers (c->u.command[0]->stdout,c->u.command[1]->stdout);
+
+        // Both commands have run but NOT within subshell
+        else
+          c->stdout = copy_buffer (c->u.command[1]->stdout);
+        break;
+
+      case PIPE_COMMAND:
+        c->stdout = copy_buffer (c->u.command[1]->stdout);
+        break;
+
+      case SUBSHELL_COMMAND:
+        c->stdout = copy_buffer (c->u.subshell_command->stdout);
+        break;
+
+      case SIMPLE_COMMAND: break;
+      default: break;
+    }
+}
+
+void
+execute_command (command_t c, bool time_travel)
+{
+  recursive_execute_command (c, time_travel, false);
+}
+
+void
+execute_simple_command (command_t c)
 {
   return;
 }

@@ -35,6 +35,8 @@ free_command (command_t c)
 {
   free (c->input);
   free (c->output);
+  free (c->stdin);
+  free (c->stdout);
 
   switch (c->type)
   {
@@ -484,6 +486,10 @@ recursive_build_command_from_expression (const char * const expr, int * const p_
 
     cmd->input = NULL;
     cmd->output = NULL;
+    cmd->stdin = NULL;
+    cmd->stdout = NULL;
+    cmd->status = -1;
+
     cmd->type = token_type;
 
     switch (cmd->type)

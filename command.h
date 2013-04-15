@@ -183,10 +183,12 @@ bool expression_redirect_order_is_valid (const char *expr, int *line_number);
  * Executes a simple command. If the command cannot be executed, we will
  * display an error and call exit--the program will not return to the caller.
  * Otherwise, we return the exit code, for convenience (and modify the passed
- * c for the exit code as well), and set output to the output to standard
- * out, if any.
+ * c for the exit code as well), and set output to c->stdout, if any. The
+ * stdout buffer will end with an EOF char followed by a null byte. Thus
+ * it is still a valid C buffer, while still carrying the EOF char for any
+ * program that is looking for it.
  */
-void execute_simple_command (command_t c, char **output, bool in_subshell);
+void execute_simple_command (command_t c);
 
 /**
  * Searches the current working directory, then the system path, for the
@@ -202,3 +204,29 @@ char* get_executable_path (char* bin_name);
  * As stated, determine if a file exists at the specified path.
  */
 bool file_exists (char *path);
+
+/**
+ * As the name implies, it allocates and copies a string buffer returning a
+ * pointer to the copy.
+ */
+char * copy_buffer (const char * const buffer);
+
+/**
+ * Takes two buffers, allocates a buffer large enough to hold the concatenation
+ * of the two buffers, and copies them. It assumes each buffer ends with an EOF
+ * char followed by a null byte, thus the EOF char from the first buffer is
+ * overwritten.
+ * If one of the buffers is null, it is the same as calling copy_buffer on the other
+ */
+char* copy_and_concat_buffers (const char * const buff_one, const char * const buff_two);
+
+/**
+ * A function that recursively traverses the command tree and executes the commands
+ * based on the tokens. A PIPE_COMMAND will copy the standard output of the previous
+ * command and set it as the standard input of the second. All standard output within
+ * a subshell is concatenated together in case the following command wishes to use it.
+ *
+ * @todo: implement freeing memory of already executed commands to avoid bloating
+ * memory from all the buffer copying and concatenation
+ */
+void recursive_execute_command (command_t c, bool time_travel, bool is_subshell);
