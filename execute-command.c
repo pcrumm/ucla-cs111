@@ -318,6 +318,9 @@ execute_simple_command (command_t c)
 
       fprintf(fp, "%s", c->stdout);
       fclose (fp);
+
+      free (c->stdout);
+      c->stdout = NULL;
     }
 
     // Set our exit code for the command
