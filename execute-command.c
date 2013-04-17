@@ -17,6 +17,8 @@
 #define PIPE_READ 0
 #define PIPE_WRITE 1
 
+#define FREE_EXECUTED_COMMANDS
+
 int
 command_status (command_t c)
 {
@@ -173,12 +175,41 @@ recursive_execute_command (command_t c, bool time_travel, bool is_subshell)
       case SIMPLE_COMMAND: break;
       default: break;
     }
+
+#ifdef FREE_EXECUTED_COMMANDS
+    // Free up memory from already executed commands to avoid
+    // memory bloats from buffer copying and concatenations
+    switch (c->type)
+      {
+        case SEQUENCE_COMMAND:
+        case AND_COMMAND:
+        case OR_COMMAND:
+        case PIPE_COMMAND:
+          free_command (c->u.command[0]);
+          free_command (c->u.command[1]);
+          c->u.command[0] = NULL;
+          c->u.command[1] = NULL;
+          break;
+        case SUBSHELL_COMMAND:
+          free_command (c->u.subshell_command);
+          c->u.subshell_command = NULL;
+          break;
+        // No need to free the words in SIMPLE_COMMANDs, they'll get
+        // cleaned up at at the end of the previous recursive call
+        case SIMPLE_COMMAND: break;
+        default: break;
+      }
+#endif // FREE_EXECUTED_COMMANDS
 }
 
 void
 execute_command (command_t c, bool time_travel)
 {
   recursive_execute_command (c, time_travel, false);
+
+  // Output the final result. Note the lack of trailing newline
+  // that's up to the actual command to output
+  printf("%s", c->output);
 }
 
 void
