@@ -172,6 +172,10 @@ void
 execute_command (command_t c, bool time_travel)
 {
   recursive_execute_command (c, time_travel, false);
+
+  // Output the final result. Note the lack of trailing newline
+  // that's up to the actual command to output
+  printf("%s", c->output);
 }
 
 void
