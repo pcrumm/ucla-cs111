@@ -33,6 +33,9 @@ struct command_stream
 void
 free_command (command_t c)
 {
+  if(c == NULL)
+    return;
+
   free (c->input);
   free (c->output);
   free (c->stdin);
