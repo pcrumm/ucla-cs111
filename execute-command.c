@@ -9,6 +9,13 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
+
+#define PIPE_READ 0
+#define PIPE_WRITE 1
 
 int
 command_status (command_t c)
@@ -177,7 +184,115 @@ execute_command (command_t c, bool time_travel)
 void
 execute_simple_command (command_t c)
 {
-  return;
+  // First, find the proper binary.
+  char *exec_bin = get_executable_path (c->u.word[0]);
+  if (exec_bin == NULL)
+    show_error (c->line_number, "Could not find binary to execute");
+
+  free (c->u.word[0]);
+  c->u.word[0] = exec_bin;
+
+  // If we found it, let's execute it!
+  // First, create a pipe to handle input/output to the command
+  int outfd[2], infd[2], pid, exit_status;
+  pipe (outfd);
+  pipe (infd);
+
+  if ((pid = fork ()) < 0)
+    show_error (c->line_number, "Could not fork.");
+
+  if (pid == 0) // Child process
+  {
+    close (STDOUT_FILENO);
+    close (STDIN_FILENO);
+
+    dup2 (outfd[PIPE_READ], STDIN_FILENO);
+    dup2 (infd[PIPE_WRITE], STDOUT_FILENO);
+
+    // We are not using the read end here, so close it
+    close (infd[PIPE_READ]);
+    close (infd[PIPE_WRITE]);
+
+    close (outfd[PIPE_READ]);
+    close (outfd[PIPE_WRITE]);
+
+    // Execute!
+    execvp (c->u.word[0], c->u.word);
+
+    // If we got here, there's a problem
+    show_error (c->line_number, "Execution error");
+  }
+  else // Parent process
+  {
+    close (outfd[PIPE_READ]); // used by the child
+    close (infd[PIPE_WRITE]);
+
+    // write to child's stdin (outfd[1] - outfd[PIPE_WRITE])
+    // If we have any stdin, write it to the pipe
+    if (c->stdin != NULL)
+    {
+      if (write (outfd[PIPE_WRITE], c->stdin, strlen(c->stdin)) == -1)
+        show_error (c->line_number, "Could not write to input.");
+    }
+
+    // If we have an input redirection, read that. Note that we will ignore this if
+    // there is already data to write to stdin.
+    if (c->input != NULL && c->stdin == NULL)
+    {
+      if ((c->input = get_redirect_file_path (c->input)) != NULL)
+      {
+        char *input = get_file_contents (c->input);
+
+        // now write it into our standard input for the child
+        write (outfd[PIPE_WRITE], input, strlen(input));
+        free (input);
+      }
+      else
+        show_error (c->line_number, "Could not read.");
+    }
+
+    // Read from the standard output and write it to a file, as necessary
+    int stdout_buffer_size = 1024;
+    char *stdout_input = checked_malloc (sizeof (char) * stdout_buffer_size);
+    c->stdout = checked_malloc (sizeof (char) * stdout_buffer_size);
+
+    ssize_t read_bytes = 0, total_read_bytes = 0;
+    while ((read_bytes = read (infd[PIPE_READ], stdout_input, stdout_buffer_size)) > 0)
+    {
+      c->stdout = checked_realloc(c->stdout, sizeof (char) * total_read_bytes + read_bytes);
+      strcat (c->stdout + total_read_bytes, stdout_input);
+
+      total_read_bytes += read_bytes;
+
+      // Reset the old memory
+      memset (stdout_input, '\0', stdout_buffer_size);
+    }
+
+    free (stdout_input);
+
+    close (outfd[PIPE_WRITE]);
+    close (infd[PIPE_READ]);
+
+    if (c->output != NULL)
+    {
+      // We need to write c->stdout to a file!
+      c->output = get_redirect_file_path (c->output);
+      if (c->output == NULL)
+        show_error (c->line_number, "Could not find output file");
+
+      FILE *fp;
+      fp = fopen (c->output, "w");
+      if (fp == NULL)
+        show_error (c->line_number, "Could not open output file");
+
+      fprintf(fp, "%s", c->stdout);
+      fclose (fp);
+    }
+
+    // Set our exit code for the command
+    waitpid (pid, &exit_status, 0);
+    c->status = exit_status;
+  }
 }
 
 char*
@@ -196,14 +311,11 @@ get_executable_path (char* bin_name)
   strcat (path, "/");
   strcat (path, bin_name);
 
-  printf("testing path %s\n\n", path);
-
   if (file_exists (path))
     return path;
 
   // If not, let's try the system PATH variable and see if we have any matches there
   char *syspath = getenv ("PATH");
-  printf("path is %s\n\n", syspath);
 
   // Split the path
   char **path_elements = NULL;
@@ -253,4 +365,46 @@ file_exists (char *path)
   }
 
   return false;
+}
+
+char*
+get_redirect_file_path (char *redirect_file)
+{
+  // Check if this is an absolute path (started by /)
+  if (redirect_file [0] == '/')
+    return redirect_file;
+
+  // First, find the current working directory
+  char *cwd = getcwd (NULL, 0);
+
+  // Otherwise, return the relative path
+  char *path = checked_malloc (sizeof(char) * (strlen(cwd) + strlen(redirect_file) + 1));
+  strcpy (path, cwd);
+  strcat (path, "/");
+  strcat (path, redirect_file);
+
+  return path;
+}
+
+char* get_file_contents (char *file_path)
+{
+  FILE *fp;
+  struct stat st;
+  char *buffer;
+
+  fp = fopen (file_path, "r");
+  if (fp == NULL)
+  {
+    return NULL;
+  }
+
+  fstat (fileno (fp), &st);
+  buffer = checked_malloc (sizeof (char) * (st.st_size + 1));
+  fread (buffer, sizeof (char), st.st_size, fp);
+  fclose (fp);
+
+  // Set the last byte as the null byte
+  buffer[st.st_size] = '\0';
+
+  return buffer;
 }

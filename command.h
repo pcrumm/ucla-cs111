@@ -230,3 +230,14 @@ char* copy_and_concat_buffers (const char * const buff_one, const char * const b
  * memory from all the buffer copying and concatenation
  */
 void recursive_execute_command (command_t c, bool time_travel, bool is_subshell);
+
+/**
+ * Finds a file for use with input or output redirection. Checks the cwd and as an
+ * absolute path.
+ */
+char* get_redirect_file_path (char *redirect_file);
+
+/**
+ * Returns the contents of the specified file. Assumes that the path exists.
+ */
+char* get_file_contents (char *file_path);
