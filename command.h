@@ -182,11 +182,22 @@ bool expression_redirect_order_is_valid (const char *expr, int *line_number);
 /**
  * Executes a simple command. If the command cannot be executed, we will
  * display an error and call exit--the program will not return to the caller.
- * Otherwise, we return the exit code, for convenience (and modify the passed
- * c for the exit code as well), and set output to c->stdout, if any. The
- * stdout buffer will end with an EOF char followed by a null byte. Thus
- * it is still a valid C buffer, while still carrying the EOF char for any
- * program that is looking for it.
+ *
+ * Piping rules: if the command being executed has a file redirect, it has higher
+ * precedence than piping, therefore, file redirects overwrite any specified
+ * file descriptors.
+ *
+ * If the command has the value -1 set for either fd_write_to or fd_read_from this
+ * signals execute_simple_command to open a pipe to write its output to, while reading
+ * from stdin as normal. If any other 0 or positive value is specified for either
+ * fd_read_from or fd_write_to, set fd_read_from as the input for the command, and
+ * fd_write_to as the output, respectively.
+ *
+ * (@pcrumm: I think they still need to be reopened to maintain a proper reference
+ * count of the readers and writers to a pipe? - @ipetkov)
+ *
+ * It is up to the caller to then close the open file descriptors, as well as issue
+ * a system wait on the forked process for it's exit status.
  */
 void execute_simple_command (command_t c);
 
@@ -206,30 +217,32 @@ char* get_executable_path (char* bin_name);
 bool file_exists (char *path);
 
 /**
- * As the name implies, it allocates and copies a string buffer returning a
- * pointer to the copy.
- */
-char * copy_buffer (const char * const buffer);
-
-/**
- * Takes two buffers, allocates a buffer large enough to hold the concatenation
- * of the two buffers, and copies them. It assumes each buffer ends with an EOF
- * char followed by a null byte, thus the EOF char from the first buffer is
- * overwritten.
- * If one of the buffers is null, it is the same as calling copy_buffer on the other
- */
-char* copy_and_concat_buffers (const char * const buff_one, const char * const buff_two);
-
-/**
  * A function that recursively traverses the command tree and executes the commands
- * based on the tokens. A PIPE_COMMAND will copy the standard output of the previous
- * command and set it as the standard input of the second. All standard output within
- * a subshell is concatenated together in case the following command wishes to use it.
+ * based on the tokens. Any unpiped commands' output will directly be written to stdout.
+ * Any piped commands will open a pipe between the two commands.
  *
- * @todo: implement freeing memory of already executed commands to avoid bloating
- * memory from all the buffer copying and concatenation
+ * In the case of nested piping, file descriptors will be closed and forked processes
+ * waited on after the outermost pipe has been set up. Thus we avoid deadlock in between
+ * waiting on a nested pipe to exit while the outermost pipe is not being read from.
  */
-void recursive_execute_command (command_t c, bool time_travel, bool is_subshell);
+void recursive_execute_command (command_t c, bool pipe_output);
+
+/**
+ * Frees up CPU resources as a result of executing a command.
+ * Any file descriptors opened by SIMPLE_COMMANDs will be closed. Other commands which
+ * are parents of SIMPLE_COMMANDs will have copied their file descriptors for reference,
+ * but as they should not be opening them, they will NOT be closed for non-SIMPLE_COMMANDs.
+ * Moreover, if the SIMPLE_COMMAND is still executed (denoted by a status of -1 and a
+ * positive pid) a wait will be issued on the pid and the status saved and propagated to
+ * any parent as appropriate.
+ *
+ * At the end of the function the status will be properly set, the pid will be -1, and the
+ * file descriptors closed and set to -1 as well.
+ *
+ * Calling this function will effectively block the process until the child command has
+ * exited.
+ */
+void close_command_exec_resources (command_t c);
 
 /**
  * Finds a file for use with input or output redirection. Checks the cwd and as an

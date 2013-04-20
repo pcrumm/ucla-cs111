@@ -25,6 +25,10 @@ struct command
   char *stdin;
   char *stdout;
 
+  int pid;
+  int fd_write_to;
+  int fd_read_from;
+
   union
   {
     // for AND_COMMAND, SEQUENCE_COMMAND, OR_COMMAND, PIPE_COMMAND:

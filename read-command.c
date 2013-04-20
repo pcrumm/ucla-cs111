@@ -36,6 +36,8 @@ free_command (command_t c)
   if(c == NULL)
     return;
 
+  close_command_exec_resources (c);
+
   free (c->input);
   free (c->output);
   free (c->stdin);
@@ -492,6 +494,9 @@ recursive_build_command_from_expression (const char * const expr, int * const p_
     cmd->stdin = NULL;
     cmd->stdout = NULL;
     cmd->status = -1;
+    cmd->pid = -1;
+    cmd->fd_write_to = -1;
+    cmd->fd_read_from = -1;
 
     cmd->type = token_type;
 
