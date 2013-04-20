@@ -317,7 +317,7 @@ execute_simple_command (command_t c)
     }
 
     close (outfd[PIPE_WRITE]);
-    close (infd[PIPE_READ]);
+    c->fd_write_to = infd[PIPE_READ];
   }
   //********************************************************************************
 }
