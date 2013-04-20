@@ -211,10 +211,6 @@ execute_command (command_t c, bool time_travel)
 void
 execute_simple_command (command_t c)
 {
-  // Leaving this here as a reminder that this function needs to be updated
-  // as running it right now along with the modifications outside of it will
-  // result in undefined behavior - @ipetkov
-  error (1, 0, "command execution not yet updated to match new specifications");
 
   //********************************************************************************
   // First, find the proper binary.
@@ -227,7 +223,7 @@ execute_simple_command (command_t c)
 
   // If we found it, let's execute it!
   // First, create a pipe to handle input/output to the command
-  int outfd[2], infd[2], pid, exit_status;
+  int outfd[2], infd[2], pid;
   pipe (outfd);
   pipe (infd);
 
@@ -239,8 +235,15 @@ execute_simple_command (command_t c)
     close (STDOUT_FILENO);
     close (STDIN_FILENO);
 
-    dup2 (outfd[PIPE_READ], STDIN_FILENO);
-    dup2 (infd[PIPE_WRITE], STDOUT_FILENO);
+    if (c->fd_read_from == -1)
+      dup2 (outfd[PIPE_READ], STDIN_FILENO);
+    else
+      dup2 (outfd[PIPE_READ], c->fd_read_from);
+
+    if (c->fd_write_to == -1)
+      dup2 (infd[PIPE_WRITE], STDOUT_FILENO);
+    else
+      dup2 (outfd[PIPE_READ], c->fd_write_to);
 
     // We are not using the read end here, so close it
     close (infd[PIPE_READ]);
@@ -257,20 +260,13 @@ execute_simple_command (command_t c)
   }
   else // Parent process
   {
+    c->pid = pid; // Set the child's PID
+
     close (outfd[PIPE_READ]); // used by the child
     close (infd[PIPE_WRITE]);
 
-    // write to child's stdin (outfd[1] - outfd[PIPE_WRITE])
-    // If we have any stdin, write it to the pipe
-    if (c->stdin != NULL)
-    {
-      if (write (outfd[PIPE_WRITE], c->stdin, strlen(c->stdin)) == -1)
-        show_error (c->line_number, "Could not write to input.");
-    }
-
-    // If we have an input redirection, read that. Note that we will ignore this if
-    // there is already data to write to stdin.
-    if (c->input != NULL && c->stdin == NULL)
+    // If we have an input redirection, read that.
+    if (c->input != NULL)
     {
       if ((c->input = get_redirect_file_path (c->input)) != NULL)
       {
@@ -284,30 +280,25 @@ execute_simple_command (command_t c)
         show_error (c->line_number, "Could not read.");
     }
 
-    // Read from the standard output and write it to a file, as necessary
-    int stdout_buffer_size = 1024;
-    char *stdout_input = checked_malloc (sizeof (char) * stdout_buffer_size);
-    c->stdout = checked_malloc (sizeof (char) * stdout_buffer_size);
-
-    ssize_t read_bytes = 0, total_read_bytes = 0;
-    while ((read_bytes = read (infd[PIPE_READ], stdout_input, stdout_buffer_size)) > 0)
-    {
-      c->stdout = checked_realloc(c->stdout, sizeof (char) * total_read_bytes + read_bytes);
-      strcat (c->stdout + total_read_bytes, stdout_input);
-
-      total_read_bytes += read_bytes;
-
-      // Reset the old memory
-      memset (stdout_input, '\0', stdout_buffer_size);
-    }
-
-    free (stdout_input);
-
-    close (outfd[PIPE_WRITE]);
-    close (infd[PIPE_READ]);
-
     if (c->output != NULL)
     {
+      // Read from the standard output and write it to a file, as necessary
+      int stdout_buffer_size = 1024;
+      char *stdout_input = checked_malloc (sizeof (char) * stdout_buffer_size);
+      char *stdout_full_buffer = checked_malloc (sizeof (char) * stdout_buffer_size);
+
+      ssize_t read_bytes = 0, total_read_bytes = 0;
+      while ((read_bytes = read (infd[PIPE_READ], stdout_input, stdout_buffer_size)) > 0)
+      {
+        stdout_full_buffer = checked_realloc(stdout_full_buffer, sizeof (char) * total_read_bytes + read_bytes);
+        strcat (stdout_full_buffer + total_read_bytes, stdout_input);
+
+        total_read_bytes += read_bytes;
+
+        // Reset the old memory
+        memset (stdout_input, '\0', stdout_buffer_size);
+      }
+
       // We need to write c->stdout to a file!
       c->output = get_redirect_file_path (c->output);
       if (c->output == NULL)
@@ -318,16 +309,15 @@ execute_simple_command (command_t c)
       if (fp == NULL)
         show_error (c->line_number, "Could not open output file");
 
-      fprintf(fp, "%s", c->stdout);
+      fprintf(fp, "%s", stdout_full_buffer);
       fclose (fp);
 
-      free (c->stdout);
-      c->stdout = NULL;
+      free (stdout_full_buffer);
+      free (stdout_input);
     }
 
-    // Set our exit code for the command
-    waitpid (pid, &exit_status, 0);
-    c->status = exit_status;
+    close (outfd[PIPE_WRITE]);
+    close (infd[PIPE_READ]);
   }
   //********************************************************************************
 }

@@ -22,9 +22,6 @@ struct command
   char *input;
   char *output;
 
-  char *stdin;
-  char *stdout;
-
   int pid;
   int fd_write_to;
   int fd_read_from;
