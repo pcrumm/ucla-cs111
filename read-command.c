@@ -648,6 +648,19 @@ make_command_stream (int (*get_next_byte) (void *),
       continue;
     }
 
+    // If this is a newline and we have an uneven paren count, we need to keep going
+    else if (current_char == NEWLINE_CHAR && open_paren_count > 0 && open_paren_count != close_paren_count)
+    {
+      total_lines_read++;
+
+      // We add a semicolon to the command to break it into a sequence, by @ipetkov's request. This allows him to
+      // properly parse it later.
+      expression_buffer = add_char_to_expression (SEQUENCE_COMMAND_CHAR, expression_buffer, &current_expression_size, &expression_buffer_size);
+      expression_buffer = add_char_to_expression (current_char, expression_buffer, &current_expression_size, &expression_buffer_size);
+
+      continue;
+    }
+
     // If this is not a newline or a comment, just add it to the buffer...
     else if (current_char != NEWLINE_CHAR && current_char != COMMENT_CHAR && !in_comment && (current_char != SEQUENCE_COMMAND_CHAR || open_paren_count != close_paren_count ))
     {
