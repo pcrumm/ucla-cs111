@@ -23,8 +23,8 @@ struct command
   char *output;
 
   int pid;
-  int fd_write_to;
-  int fd_read_from;
+  int fd_read_from;   // Specified fd for the command to read from. -1 defaults to STDIN
+  int fd_writing_to;  // Signifies the read end of the pipe being written to
 
   union
   {
