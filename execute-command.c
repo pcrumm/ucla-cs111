@@ -51,7 +51,15 @@ close_command_exec_resources (command_t c)
         break;
       case SIMPLE_COMMAND:
         if(c->pid > 0)
-          waitpid (c->pid, &c->status, 0);
+          {
+            int exit_status;
+            waitpid (c->pid, &exit_status, 0);
+
+            // Check whether the child exited successfully
+            // If it exited due to a signal record the signal instead
+            if(WIFEXITED (exit_status))
+              c->status = WEXITSTATUS (exit_status);
+          }
 
         if(c->fd_read_from > -1)
           close (c->fd_read_from);
