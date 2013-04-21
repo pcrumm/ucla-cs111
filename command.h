@@ -171,7 +171,7 @@ void show_syntax_error (int line_number, char *desc);
 /**
  * Write an error to the standard output and exit for any errors.
  */
-void show_error (int line_number, char *desc);
+void show_error (int line_number, char *desc, char *desc2);
 
 /**
  * Recursively analyzes an expression and verifies that there is no more than

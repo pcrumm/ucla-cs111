@@ -25,9 +25,12 @@ command_status (command_t c)
 }
 
 void
-show_error (int line_number, char *desc)
+show_error (int line_number, char *desc, char *desc2)
 {
-  fprintf (stderr, "%d: %s\n", line_number, desc);
+  if(desc2 == NULL)
+    fprintf (stderr, "%d: %s\n", line_number, desc);
+  else
+    fprintf (stderr, "%d: %s \"%s\"\n", line_number, desc, desc2);
   exit (EXIT_FAILURE);
 }
 
@@ -224,7 +227,7 @@ execute_simple_command (command_t c, bool pipe_output)
   // First, find the proper binary.
   char *exec_bin = get_executable_path (c->u.word[0]);
   if (exec_bin == NULL)
-    show_error (c->line_number, "Could not find binary to execute");
+    show_error (c->line_number, "Could not find binary to execute", c->u.word[0]);
 
   free (c->u.word[0]);
   c->u.word[0] = exec_bin;
@@ -240,7 +243,7 @@ execute_simple_command (command_t c, bool pipe_output)
     c->fd_writing_to = -1;
 
   if ((pid = fork ()) < 0)
-    show_error (c->line_number, "Could not fork.");
+    show_error (c->line_number, "Could not fork.", NULL);
 
   if (pid == 0) // Child process
   {
@@ -252,7 +255,7 @@ execute_simple_command (command_t c, bool pipe_output)
         int fd_in = open (c->input, O_RDONLY);
 
         if(fd_in == -1)
-          show_error (c->line_number, "Error opening input file");
+          show_error (c->line_number, "Error opening input file", c->input);
 
         // dup2 will close STDIN_FILENO for us
         dup2 (fd_in, STDIN_FILENO);
@@ -276,7 +279,7 @@ execute_simple_command (command_t c, bool pipe_output)
             S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH); // By default bash in posix mode will create files as rw-r--r--
 
         if(fd_out == -1)
-          show_error (c->line_number, "Error opening output file");
+          show_error (c->line_number, "Error opening output file", c->output);
 
         dup2 (fd_out, STDOUT_FILENO);
         close (fd_out);
@@ -297,7 +300,7 @@ execute_simple_command (command_t c, bool pipe_output)
     execvp (c->u.word[0], c->u.word);
 
     // If we got here, there's a problem
-    show_error (c->line_number, "Execution error");
+    show_error (c->line_number, "Execution error", NULL);
   }
   else // Parent process
   {
