@@ -788,7 +788,7 @@ make_command_stream (int (*get_next_byte) (void *),
 void
 show_error (int line_number, char *desc)
 {
-  fprintf (stderr, "%d: Incorrect syntax: %s", line_number, desc);
+  fprintf (stderr, "%d: Incorrect syntax: %s\n", line_number, desc);
   free (desc);
   exit (EXIT_FAILURE);
 }

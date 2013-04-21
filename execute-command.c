@@ -333,7 +333,7 @@ get_executable_path (char* bin_name)
   char *cwd = getcwd (NULL, 0);
 
   // Does it exist relative to the current directory?
-  char *path = checked_malloc (sizeof(char) * (strlen(cwd) + strlen(bin_name) + 1));
+  char *path = checked_malloc (sizeof(char) * (strlen(cwd) + strlen(bin_name) + 1 + 1)); // Add one char for '/' and one for NULL
   strcpy (path, cwd);
   strcat (path, "/");
   strcat (path, bin_name);
@@ -344,9 +344,14 @@ get_executable_path (char* bin_name)
   // If not, let's try the system PATH variable and see if we have any matches there
   char *syspath = getenv ("PATH");
 
+  // "The application shall ensure that it does not modify the string pointed to by the getenv() function."
+  // By definition of getenv, we copy the string and modify the copy with strtok
+  char *syspath_copy = checked_malloc(sizeof (char) * (strlen (syspath) + 1 + 1)); // Add one char for '/' and one for NULL
+  strcpy (syspath_copy, syspath);
+
   // Split the path
   char **path_elements = NULL;
-  char *p = strtok (syspath, ":");
+  char *p = strtok (syspath_copy, ":");
   int path_items = 0, i;
 
   while (p)
@@ -360,12 +365,12 @@ get_executable_path (char* bin_name)
   }
 
   path_elements[path_items] = NULL; // Make sure the last item is null for later looping
-  free(p);
 
   // Now, let's iterate over each item in the path and see if it's a fit
   for (i = 0; path_elements[i] != NULL; i++)
   {
-    path = checked_realloc (path, sizeof(char) * (strlen(bin_name) + strlen(path_elements[i] + 1)));
+    size_t len = sizeof(char) * (strlen(bin_name) + strlen(path_elements[i]) + 1);
+    path = checked_grow_alloc (path, &len);
     strcpy (path, path_elements[i]);
     strcat (path, "/");
     strcat (path, bin_name);
@@ -373,10 +378,13 @@ get_executable_path (char* bin_name)
     if (file_exists (path))
     {
       free (path_elements);
+      free (syspath_copy);
       return path;
     }
   }
 
+  free (path_elements);
+  free (syspath_copy);
   free (path);
   return NULL; // If we got this far, there's an error.
 }
