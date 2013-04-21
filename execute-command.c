@@ -190,6 +190,8 @@ recursive_execute_command (command_t c, bool pipe_output)
               close_command_exec_resources (c->u.command[0]);
               close_command_exec_resources (c->u.command[1]);
             }
+
+          c->status = c->u.command[1]->status;
           break;
 
         case SIMPLE_COMMAND:
