@@ -164,7 +164,12 @@ bool token_ends_at_point (const char *expr, size_t point);
 bool is_valid_word_char (char c);
 
 /**
- * Write an error to the standard output and exit.
+ * Write an error to the standard output and exit for syntax errors.
+ */
+void show_syntax_error (int line_number, char *desc);
+
+/**
+ * Write an error to the standard output and exit for any errors.
  */
 void show_error (int line_number, char *desc);
 
@@ -187,19 +192,16 @@ bool expression_redirect_order_is_valid (const char *expr, int *line_number);
  * precedence than piping, therefore, file redirects overwrite any specified
  * file descriptors.
  *
- * If the command has the value -1 set for either fd_write_to or fd_read_from this
- * signals execute_simple_command to open a pipe to write its output to, while reading
- * from stdin as normal. If any other 0 or positive value is specified for either
- * fd_read_from or fd_write_to, set fd_read_from as the input for the command, and
- * fd_write_to as the output, respectively.
- *
- * (@pcrumm: I think they still need to be reopened to maintain a proper reference
- * count of the readers and writers to a pipe? - @ipetkov)
+ * If the command has a value of -1 set for fd_read_from the command will default
+ * to reading to STDIN. Otherwise it will attempt to read from the specified
+ * file descriptor. If a value of false is passed in for pipe_output the command
+ * will default to writing to STDOUT. Otherwise it will open up a pipe and specify
+ * the READ end of the pipe by setting its fd_writing_to field.
  *
  * It is up to the caller to then close the open file descriptors, as well as issue
  * a system wait on the forked process for it's exit status.
  */
-void execute_simple_command (command_t c);
+void execute_simple_command (command_t c, bool pipe_output);
 
 /**
  * Searches the current working directory, then the system path, for the

@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #define PIPE_READ 0
 #define PIPE_WRITE 1
@@ -21,6 +22,13 @@ int
 command_status (command_t c)
 {
   return c->status;
+}
+
+void
+show_error (int line_number, char *desc)
+{
+  fprintf (stderr, "%d: %s\n", line_number, desc);
+  exit (EXIT_FAILURE);
 }
 
 void
@@ -43,19 +51,26 @@ close_command_exec_resources (command_t c)
         break;
       case SIMPLE_COMMAND:
         if(c->pid > 0)
-          waitpid (c->pid, &c->status, 0);
+          {
+            int exit_status;
+            waitpid (c->pid, &exit_status, 0);
 
-        if(c->fd_write_to != -1)
-          close (c->fd_write_to);
+            // Check whether the child exited successfully
+            // If it exited due to a signal record the signal instead
+            if(WIFEXITED (exit_status))
+              c->status = WEXITSTATUS (exit_status);
+          }
 
-        if(c->fd_read_from != -1)
+        if(c->fd_read_from > -1)
           close (c->fd_read_from);
+
+        // fd_writing_to should be closed by its reader
         break;
       default: break;
     }
 
-    c->fd_write_to = -1;
     c->fd_read_from = -1;
+    c->fd_writing_to = -1;
     c->pid = -1;
 
     // Propagate the status to the parent
@@ -99,15 +114,15 @@ recursive_execute_command (command_t c, bool pipe_output)
       case AND_COMMAND:
       case OR_COMMAND:
       case PIPE_COMMAND:
-        c->u.command[0]->fd_write_to = c->fd_write_to;
         c->u.command[0]->fd_read_from = c->fd_read_from;
+        c->u.command[0]->fd_writing_to = c->fd_writing_to;
 
-        c->u.command[1]->fd_write_to = c->fd_write_to;
         c->u.command[1]->fd_read_from = c->fd_read_from;
+        c->u.command[1]->fd_writing_to = c->fd_writing_to;
         break;
       case SUBSHELL_COMMAND:
-        c->u.subshell_command->fd_write_to = c->fd_write_to;
         c->u.subshell_command->fd_read_from = c->fd_read_from;
+        c->u.subshell_command->fd_writing_to = c->fd_writing_to;
         break;
       case SIMPLE_COMMAND: break;
       default: break;
@@ -127,6 +142,7 @@ recursive_execute_command (command_t c, bool pipe_output)
         // Status of SUBSHELL_COMMAND is the same as the command inside it
         recursive_execute_command (c->u.subshell_command, pipe_output);
         c->status = c->u.subshell_command->status;
+        c->fd_writing_to = c->u.subshell_command->fd_writing_to;
         break;
 
       case AND_COMMAND:
@@ -161,41 +177,30 @@ recursive_execute_command (command_t c, bool pipe_output)
           recursive_execute_command (c->u.command[0], true);
 
           // Set the next command to read from the opened pipe
-          c->u.command[1]->fd_read_from = c->u.command[0]->fd_write_to;
+          c->u.command[1]->fd_read_from = c->u.command[0]->fd_writing_to;
 
-          recursive_execute_command (c->u.command[1], true);
+          recursive_execute_command (c->u.command[1], pipe_output);
+          c->fd_writing_to = c->u.command[1]->fd_writing_to;
 
           // Close the resources if and only if we aren't in a nested pipe
           // otherwise it's possible to cause a deadlock! Everything will get recursively
           // freed in a higher frame anyways.
           if(!pipe_output)
             {
-              const size_t buff_size = 8 * 1024; // Use a 8 KiB buffer
-              char buff[buff_size];
-
-              while (read (c->fd_write_to, buff, buff_size) > 0)
-                printf("%s", buff);
-
               close_command_exec_resources (c->u.command[0]);
               close_command_exec_resources (c->u.command[1]);
             }
+
+          c->status = c->u.command[1]->status;
           break;
 
         case SIMPLE_COMMAND:
-          execute_simple_command (c);
+          execute_simple_command (c, pipe_output);
 
-          // Since we aren't piping we can go ahead and print the results, and free any CPU resources
+          // Since we aren't piping we can go ahead and free any CPU resources
           // Otherwise they will get freed when the pipe is completed
           if(!pipe_output)
-            {
-              const size_t buff_size = 8 * 1024; // Use a 8 KiB buffer
-              char buff[buff_size];
-
-              while (read (c->fd_write_to, buff, buff_size) > 0)
-                printf("%s", buff);
-
               close_command_exec_resources (c);
-            }
           break;
 
         default: break;
@@ -209,10 +214,13 @@ execute_command (command_t c, bool time_travel)
 }
 
 void
-execute_simple_command (command_t c)
+execute_simple_command (command_t c, bool pipe_output)
 {
+  // This is a "blank command" which was probably all newlines as a result of comments being read
+  // No need to do anything further
+  if(c->u.word[0] == NULL)
+    return;
 
-  //********************************************************************************
   // First, find the proper binary.
   char *exec_bin = get_executable_path (c->u.word[0]);
   if (exec_bin == NULL)
@@ -223,34 +231,61 @@ execute_simple_command (command_t c)
 
   // If we found it, let's execute it!
   // First, create a pipe to handle input/output to the command
-  int outfd[2], infd[2], pid;
-  pipe (outfd);
-  pipe (infd);
+  int pipefd[2], pid;
+  pipe (pipefd);
+
+  if(c->output == NULL && pipe_output) // Signifies where to read the pipe from
+    c->fd_writing_to = pipefd[PIPE_READ];
+  else
+    c->fd_writing_to = -1;
 
   if ((pid = fork ()) < 0)
     show_error (c->line_number, "Could not fork.");
 
   if (pid == 0) // Child process
   {
-    close (STDOUT_FILENO);
-    close (STDIN_FILENO);
+    // File redirects trump pipes, thus we ignore specified pipes if redirects are present
+    if(c->input != NULL)
+      {
+        int fd_in = open (c->input, O_RDONLY);
 
-    if (c->fd_read_from == -1)
-      dup2 (outfd[PIPE_READ], STDIN_FILENO);
+        if(fd_in == -1)
+          show_error (c->line_number, "Error opening input file");
+
+        // dup2 will close STDIN_FILENO for us
+        dup2 (fd_in, STDIN_FILENO);
+        close (fd_in);
+      }
+    else if (c->fd_read_from > -1)
+      {
+        dup2 (c->fd_read_from, STDIN_FILENO);
+      }
     else
-      dup2 (outfd[PIPE_READ], c->fd_read_from);
+      {
+        // Leave STDIN_FILENO open!
+      }
 
-    if (c->fd_write_to == -1)
-      dup2 (infd[PIPE_WRITE], STDOUT_FILENO);
+    // File redirects trump pipes, thus we ignore specified pipes if redirects are present
+    if(c->output != NULL)
+      {
+        int fd_out = open (c->output,
+            O_WRONLY | O_CREAT | O_TRUNC,           // Data from the file will be truncated
+            S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH); // By default bash in posix mode will create files as rw-r--r--
+
+        if(fd_out == -1)
+          show_error (c->line_number, "Error opening output file");
+
+        dup2 (fd_out, STDOUT_FILENO);
+        close (fd_out);
+      }
+    else if(pipe_output)
+      {
+        dup2 (pipefd[PIPE_WRITE], STDOUT_FILENO);
+      }
     else
-      dup2 (outfd[PIPE_READ], c->fd_write_to);
-
-    // We are not using the read end here, so close it
-    close (infd[PIPE_READ]);
-    close (infd[PIPE_WRITE]);
-
-    close (outfd[PIPE_READ]);
-    close (outfd[PIPE_WRITE]);
+      {
+        // Leave STDOUT_FILENO open!
+      }
 
     // Execute!
     execvp (c->u.word[0], c->u.word);
@@ -262,69 +297,19 @@ execute_simple_command (command_t c)
   {
     c->pid = pid; // Set the child's PID
 
-    close (outfd[PIPE_READ]); // used by the child
-    close (infd[PIPE_WRITE]);
+    close (pipefd[PIPE_WRITE]);
 
-    // If we have an input redirection, read that.
-    if (c->input != NULL)
-    {
-      if ((c->input = get_redirect_file_path (c->input)) != NULL)
-      {
-        char *input = get_file_contents (c->input);
-
-        // now write it into our standard input for the child
-        write (outfd[PIPE_WRITE], input, strlen(input));
-        free (input);
-      }
-      else
-        show_error (c->line_number, "Could not read.");
-    }
-
-    if (c->output != NULL)
-    {
-      // Read from the standard output and write it to a file, as necessary
-      int stdout_buffer_size = 1024;
-      char *stdout_input = checked_malloc (sizeof (char) * stdout_buffer_size);
-      char *stdout_full_buffer = checked_malloc (sizeof (char) * stdout_buffer_size);
-
-      ssize_t read_bytes = 0, total_read_bytes = 0;
-      while ((read_bytes = read (infd[PIPE_READ], stdout_input, stdout_buffer_size)) > 0)
-      {
-        stdout_full_buffer = checked_realloc(stdout_full_buffer, sizeof (char) * total_read_bytes + read_bytes);
-        strcat (stdout_full_buffer + total_read_bytes, stdout_input);
-
-        total_read_bytes += read_bytes;
-
-        // Reset the old memory
-        memset (stdout_input, '\0', stdout_buffer_size);
-      }
-
-      // We need to write c->stdout to a file!
-      c->output = get_redirect_file_path (c->output);
-      if (c->output == NULL)
-        show_error (c->line_number, "Could not find output file");
-
-      FILE *fp;
-      fp = fopen (c->output, "w");
-      if (fp == NULL)
-        show_error (c->line_number, "Could not open output file");
-
-      fprintf(fp, "%s", stdout_full_buffer);
-      fclose (fp);
-
-      free (stdout_full_buffer);
-      free (stdout_input);
-    }
-
-    close (outfd[PIPE_WRITE]);
-    c->fd_write_to = infd[PIPE_READ];
+    if(!pipe_output)
+      close (pipefd[PIPE_READ]);
   }
-  //********************************************************************************
 }
 
 char*
 get_executable_path (char* bin_name)
 {
+  if(bin_name == NULL)
+    return NULL;
+
   // Check if this is a valid absolute price
   if (file_exists (bin_name))
     return bin_name;
@@ -333,7 +318,7 @@ get_executable_path (char* bin_name)
   char *cwd = getcwd (NULL, 0);
 
   // Does it exist relative to the current directory?
-  char *path = checked_malloc (sizeof(char) * (strlen(cwd) + strlen(bin_name) + 1));
+  char *path = checked_malloc (sizeof(char) * (strlen(cwd) + strlen(bin_name) + 1 + 1)); // Add one char for '/' and one for NULL
   strcpy (path, cwd);
   strcat (path, "/");
   strcat (path, bin_name);
@@ -344,9 +329,14 @@ get_executable_path (char* bin_name)
   // If not, let's try the system PATH variable and see if we have any matches there
   char *syspath = getenv ("PATH");
 
+  // "The application shall ensure that it does not modify the string pointed to by the getenv() function."
+  // By definition of getenv, we copy the string and modify the copy with strtok
+  char *syspath_copy = checked_malloc(sizeof (char) * (strlen (syspath) + 1 + 1)); // Add one char for '/' and one for NULL
+  strcpy (syspath_copy, syspath);
+
   // Split the path
   char **path_elements = NULL;
-  char *p = strtok (syspath, ":");
+  char *p = strtok (syspath_copy, ":");
   int path_items = 0, i;
 
   while (p)
@@ -360,12 +350,12 @@ get_executable_path (char* bin_name)
   }
 
   path_elements[path_items] = NULL; // Make sure the last item is null for later looping
-  free(p);
 
   // Now, let's iterate over each item in the path and see if it's a fit
   for (i = 0; path_elements[i] != NULL; i++)
   {
-    path = checked_realloc (path, sizeof(char) * (strlen(bin_name) + strlen(path_elements[i] + 1)));
+    size_t len = sizeof(char) * (strlen(bin_name) + strlen(path_elements[i]) + 1);
+    path = checked_grow_alloc (path, &len);
     strcpy (path, path_elements[i]);
     strcat (path, "/");
     strcat (path, bin_name);
@@ -373,10 +363,13 @@ get_executable_path (char* bin_name)
     if (file_exists (path))
     {
       free (path_elements);
+      free (syspath_copy);
       return path;
     }
   }
 
+  free (path_elements);
+  free (syspath_copy);
   free (path);
   return NULL; // If we got this far, there's an error.
 }

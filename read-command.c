@@ -227,8 +227,6 @@ get_pivot_token (char const *expr)
     if(token == NULL)
       token = rev_find_token (expr, PIPE_COMMAND);
 
-    // @todo check '<' and '>'
-
     // Checking '()'
     if(token == NULL)
       token = rev_find_token (expr, SUBSHELL_COMMAND);
@@ -268,7 +266,7 @@ split_expression_by_token (command_t cmd, char const *expr, char token, int * co
     p++;
 
   // Count up the remaining newlines after the end of all words
-  while((*p == token || *p == NEWLINE_CHAR) && p > expr_copy)
+  while(p > expr_copy)
     {
       if(*p == NEWLINE_CHAR)
         {
@@ -294,6 +292,15 @@ split_expression_by_token (command_t cmd, char const *expr, char token, int * co
   char** array = checked_malloc (sizeof (char*) * (size+1));
 
   p = strtok (expr_copy, token_string);
+
+  // print command assumes at least one valid word will be in the words array
+  // and thus the first check for null it makes starts at element [1]
+  // Thus if we have no words we have to set both elements [0] and [1] to null
+  if(p == NULL)
+    {
+      array[0] = NULL;
+      array[1] = NULL;
+    }
 
   while (p)
     {
@@ -491,8 +498,8 @@ recursive_build_command_from_expression (const char * const expr, int * const p_
     cmd->output = NULL;
     cmd->status = -1;
     cmd->pid = -1;
-    cmd->fd_write_to = -1;
     cmd->fd_read_from = -1;
+    cmd->fd_writing_to = -1;
 
     cmd->type = token_type;
 
@@ -748,7 +755,7 @@ make_command_stream (int (*get_next_byte) (void *),
         else
         {
           free_command_stream (expression_stream);
-          show_error(total_lines_read + error_line, expression_buffer);
+          show_syntax_error(total_lines_read + error_line, expression_buffer);
         }
 
         // And reset everything to start again...
@@ -788,7 +795,7 @@ make_command_stream (int (*get_next_byte) (void *),
     else
     {
       free_command_stream (expression_stream);
-      show_error(total_lines_read + error_line, expression_buffer);
+      show_syntax_error(total_lines_read + error_line, expression_buffer);
     }
    }
 
@@ -799,9 +806,9 @@ make_command_stream (int (*get_next_byte) (void *),
 }
 
 void
-show_error (int line_number, char *desc)
+show_syntax_error (int line_number, char *desc)
 {
-  fprintf (stderr, "%d: Incorrect syntax: %s", line_number, desc);
+  fprintf (stderr, "%d: Incorrect syntax: %s\n", line_number, desc);
   free (desc);
   exit (EXIT_FAILURE);
 }
