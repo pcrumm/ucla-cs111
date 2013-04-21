@@ -244,6 +244,8 @@ execute_simple_command (command_t c, bool pipe_output)
 
   if (pid == 0) // Child process
   {
+    close (pipefd[PIPE_READ]); // Child will never read from this newly opened pipe
+
     // File redirects trump pipes, thus we ignore specified pipes if redirects are present
     if(c->input != NULL)
       {
@@ -259,6 +261,7 @@ execute_simple_command (command_t c, bool pipe_output)
     else if (c->fd_read_from > -1)
       {
         dup2 (c->fd_read_from, STDIN_FILENO);
+        close (c->fd_read_from);
       }
     else
       {
@@ -277,14 +280,17 @@ execute_simple_command (command_t c, bool pipe_output)
 
         dup2 (fd_out, STDOUT_FILENO);
         close (fd_out);
+        close (pipefd[PIPE_WRITE]); // We already have an output location, we don't need this pipe
       }
     else if(pipe_output)
       {
         dup2 (pipefd[PIPE_WRITE], STDOUT_FILENO);
+        close (pipefd[PIPE_WRITE]);
       }
     else
       {
         // Leave STDOUT_FILENO open!
+        close (pipefd[PIPE_WRITE]);
       }
 
     // Execute!
