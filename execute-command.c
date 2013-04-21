@@ -170,9 +170,9 @@ recursive_execute_command (command_t c, bool pipe_output)
 
           // Set the next command to read from the opened pipe
           c->u.command[1]->fd_read_from = c->u.command[0]->fd_writing_to;
-          c->fd_writing_to = c->u.command[0]->fd_writing_to;
 
           recursive_execute_command (c->u.command[1], pipe_output);
+          c->fd_writing_to = c->u.command[1]->fd_writing_to;
 
           // Close the resources if and only if we aren't in a nested pipe
           // otherwise it's possible to cause a deadlock! Everything will get recursively

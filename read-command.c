@@ -266,7 +266,7 @@ split_expression_by_token (command_t cmd, char const *expr, char token, int * co
     p++;
 
   // Count up the remaining newlines after the end of all words
-  while((*p == token || *p == NEWLINE_CHAR) && p > expr_copy)
+  while(p > expr_copy)
     {
       if(*p == NEWLINE_CHAR)
         {
