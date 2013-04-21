@@ -17,4 +17,4 @@ done
 ) || exit
 
 cd .. || exit
-rm $tmp
+rm -fr $tmp
