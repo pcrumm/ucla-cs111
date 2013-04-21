@@ -293,6 +293,15 @@ split_expression_by_token (command_t cmd, char const *expr, char token, int * co
 
   p = strtok (expr_copy, token_string);
 
+  // print command assumes at least one valid word will be in the words array
+  // and thus the first check for null it makes starts at element [1]
+  // Thus if we have no words we have to set both elements [0] and [1] to null
+  if(p == NULL)
+    {
+      array[0] = NULL;
+      array[1] = NULL;
+    }
+
   while (p)
     {
       char *new_str = checked_malloc (sizeof (char) * (strlen (p)+1));
