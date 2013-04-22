@@ -254,6 +254,7 @@ recursive_execute_command (command_t c, bool pipe_output)
 void
 execute_command (command_t c, bool time_travel)
 {
+  (void)time_travel; // "Use" time_travel to avoid -Werror warnings
   recursive_execute_command (c, false);
 }
 
