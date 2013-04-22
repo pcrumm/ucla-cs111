@@ -243,8 +243,10 @@ split_expression_by_token (command_t cmd, char const *expr, char token, int * co
   size_t size = 1;                        // At least 1 element exists
   size_t index = 0;
 
-  expr_copy = checked_malloc (sizeof (char) * (strlen (expr)+1));
+  size_t len = strlen (expr);
+  expr_copy = checked_malloc (sizeof (char) * (len+1));
   p = strcpy (expr_copy, expr);
+  expr_copy[len] = '\0';
 
   // Skip through all tokens while replacing newlines until the first word is found
   while((*p == token || *p == NEWLINE_CHAR) && *p != '\0')
@@ -591,6 +593,7 @@ recursive_build_command_from_expression (const char * const expr, int * const p_
           {
             char *stripped_expr = handle_and_strip_file_redirects (expr, cmd, false);
             split_expression_by_token (cmd, stripped_expr, ' ', p_line_number);
+            free(stripped_expr);
             break;
           }
         default: break;
