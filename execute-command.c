@@ -152,7 +152,10 @@ recursive_execute_command (command_t c, bool pipe_output)
 
           if(c->input != NULL)
             {
-              int fd_in = open (c->input, O_RDONLY);
+              char *input_path = get_redirect_file_path (c->input);
+              int fd_in = open (input_path, O_RDONLY);
+
+              free (input_path);
               if(fd_in == -1) show_error (c->line_number, "Error opening input file", c->input);
 
               dup2 (fd_in, STDIN_FILENO);
@@ -161,9 +164,12 @@ recursive_execute_command (command_t c, bool pipe_output)
 
           if(c->output != NULL)
             {
+              char *output_path = get_redirect_file_path (c->output);
               int fd_out = open (c->output,
                   O_WRONLY | O_CREAT | O_TRUNC,           // Data from the file will be truncated
                   S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH); // By default bash in posix mode will create files as rw-r--r--
+
+              free (output_path);
               if(fd_out == -1) show_error (c->line_number, "Error opening output file", c->output);
 
               dup2 (fd_out, STDOUT_FILENO);
@@ -287,7 +293,9 @@ execute_simple_command (command_t c, bool pipe_output)
     // File redirects trump pipes, thus we ignore specified pipes if redirects are present
     if(c->input != NULL)
       {
-        int fd_in = open (c->input, O_RDONLY);
+        char *input_path = get_redirect_file_path (c->input);
+        int fd_in = open (input_path, O_RDONLY);
+        free (input_path);
 
         if(fd_in == -1)
           show_error (c->line_number, "Error opening input file", c->input);
@@ -309,10 +317,12 @@ execute_simple_command (command_t c, bool pipe_output)
     // File redirects trump pipes, thus we ignore specified pipes if redirects are present
     if(c->output != NULL)
       {
-        int fd_out = open (c->output,
+        char *output_path = get_redirect_file_path (c->output);
+        int fd_out = open (output_path,
             O_WRONLY | O_CREAT | O_TRUNC,           // Data from the file will be truncated
             S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH); // By default bash in posix mode will create files as rw-r--r--
 
+        free (output_path);
         if(fd_out == -1)
           show_error (c->line_number, "Error opening output file", c->output);
 
@@ -442,33 +452,10 @@ get_redirect_file_path (char *redirect_file)
   char *cwd = getcwd (NULL, 0);
 
   // Otherwise, return the relative path
-  char *path = checked_malloc (sizeof(char) * (strlen(cwd) + strlen(redirect_file) + 1));
+  char *path = checked_malloc (sizeof(char) * (strlen(cwd) + strlen(redirect_file) + 1 + 1)); // Add a space for the slash and NULL
   strcpy (path, cwd);
   strcat (path, "/");
   strcat (path, redirect_file);
 
   return path;
-}
-
-char* get_file_contents (char *file_path)
-{
-  FILE *fp;
-  struct stat st;
-  char *buffer;
-
-  fp = fopen (file_path, "r");
-  if (fp == NULL)
-  {
-    return NULL;
-  }
-
-  fstat (fileno (fp), &st);
-  buffer = checked_malloc (sizeof (char) * (st.st_size + 1));
-  fread (buffer, sizeof (char), st.st_size, fp);
-  fclose (fp);
-
-  // Set the last byte as the null byte
-  buffer[st.st_size] = '\0';
-
-  return buffer;
 }

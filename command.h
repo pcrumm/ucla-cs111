@@ -251,8 +251,3 @@ void close_command_exec_resources (command_t c);
  * absolute path.
  */
 char* get_redirect_file_path (char *redirect_file);
-
-/**
- * Returns the contents of the specified file. Assumes that the path exists.
- */
-char* get_file_contents (char *file_path);
