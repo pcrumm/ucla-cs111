@@ -142,11 +142,46 @@ recursive_execute_command (command_t c, bool pipe_output)
         break;
 
       case SUBSHELL_COMMAND:
-        // Status of SUBSHELL_COMMAND is the same as the command inside it
-        recursive_execute_command (c->u.subshell_command, pipe_output);
-        c->status = c->u.subshell_command->status;
-        c->fd_writing_to = c->u.subshell_command->fd_writing_to;
-        break;
+        {
+          // Store a copy to stdin and stdout in case the shell wants to redirect input/output
+          int fd_old_stdin  = dup (STDIN_FILENO);
+          int fd_old_stdout = dup (STDOUT_FILENO);
+
+          if(fd_old_stdin < 0 || fd_old_stdout < 0)
+            show_error(c->line_number, "Too many files open!", NULL);
+
+          if(c->input != NULL)
+            {
+              int fd_in = open (c->input, O_RDONLY);
+              if(fd_in == -1) show_error (c->line_number, "Error opening input file", c->input);
+
+              dup2 (fd_in, STDIN_FILENO);
+              close (fd_in);
+            }
+
+          if(c->output != NULL)
+            {
+              int fd_out = open (c->output,
+                  O_WRONLY | O_CREAT | O_TRUNC,           // Data from the file will be truncated
+                  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH); // By default bash in posix mode will create files as rw-r--r--
+              if(fd_out == -1) show_error (c->line_number, "Error opening output file", c->output);
+
+              dup2 (fd_out, STDOUT_FILENO);
+              close (fd_out);
+            }
+
+          // Status of SUBSHELL_COMMAND is the same as the command inside it
+          recursive_execute_command (c->u.subshell_command, pipe_output);
+          c->status = c->u.subshell_command->status;
+          c->fd_writing_to = c->u.subshell_command->fd_writing_to;
+
+          // Reset stdin and stdout
+          dup2 (fd_old_stdin, STDIN_FILENO);
+          dup2 (fd_old_stdout, STDOUT_FILENO);
+          close (fd_old_stdin);
+          close (fd_old_stdout);
+          break;
+        }
 
       case AND_COMMAND:
         // Status of AND_COMMAND is either the first failed command, or the last executed
