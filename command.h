@@ -247,6 +247,15 @@ void recursive_execute_command (command_t c, bool pipe_output);
 void close_command_exec_resources (command_t c);
 
 /**
+ * Equivalent to the `exec` keyword in bash: the current process is replaced with a
+ * command, which is the first argument to exec. Any specified redirect are applied
+ * to the process before it is replaced.
+ *
+ * This command does not return.
+ */
+void exec_utility (command_t c);
+
+/**
  * Finds a file for use with input or output redirection. Checks the cwd and as an
  * absolute path.
  */

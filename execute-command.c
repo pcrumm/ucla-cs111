@@ -265,13 +265,15 @@ execute_simple_command (command_t c, bool pipe_output)
   if(c->u.word[0] == NULL)
     return;
 
+  // If the command is the keyword `exec`, run the exec utility, which replaces the current process
+  // Control is NOT returned
+  if(strcmp (c->u.word[0], "exec") == 0)
+    exec_utility(c);
+
   // First, find the proper binary.
   char *exec_bin = get_executable_path (c->u.word[0]);
   if (exec_bin == NULL)
     show_error (c->line_number, "Could not find binary to execute", c->u.word[0]);
-
-  free (c->u.word[0]);
-  c->u.word[0] = exec_bin;
 
   // If we found it, let's execute it!
   // First, create a pipe to handle input/output to the command
@@ -342,7 +344,7 @@ execute_simple_command (command_t c, bool pipe_output)
       }
 
     // Execute!
-    execvp (c->u.word[0], c->u.word);
+    execvp (exec_bin, c->u.word);
 
     // If we got here, there's a problem
     show_error (c->line_number, "Execution error", NULL);
@@ -356,6 +358,48 @@ execute_simple_command (command_t c, bool pipe_output)
     if(!pipe_output)
       close (pipefd[PIPE_READ]);
   }
+}
+
+void
+exec_utility (command_t c)
+{
+  // First, find the proper binary.
+  char *exec_bin = get_executable_path (c->u.word[1]);
+  if (exec_bin == NULL)
+    show_error (c->line_number, "Could not find binary to execute", c->u.word[0]);
+
+  // Next, open any file redirects and replace STDIN and STDOUT
+  if(c->input != NULL)
+    {
+      char *input_path = get_redirect_file_path (c->input);
+      int fd_in = open (input_path, O_RDONLY);
+
+      free (input_path);
+      if(fd_in == -1) show_error (c->line_number, "Error opening input file", c->input);
+
+      dup2 (fd_in, STDIN_FILENO);
+      close (fd_in);
+    }
+
+    if(c->output != NULL)
+      {
+        char *output_path = get_redirect_file_path (c->output);
+        int fd_out = open (c->output,
+            O_WRONLY | O_CREAT | O_TRUNC,           // Data from the file will be truncated
+            S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH); // By default bash in posix mode will create files as rw-r--r--
+
+        free (output_path);
+        if(fd_out == -1) show_error (c->line_number, "Error opening output file", c->output);
+
+        dup2 (fd_out, STDOUT_FILENO);
+        close (fd_out);
+      }
+
+    // Execute!
+    execvp (exec_bin, c->u.word + 1);
+
+    // If we got here, there's a problem
+    show_error (c->line_number, "Exec error", NULL);
 }
 
 char*

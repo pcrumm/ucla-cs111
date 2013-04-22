@@ -16,5 +16,4 @@ for file in ../shell-compare/* ; do
 done
 ) || exit
 
-cd .. || exit
 rm -fr $tmp
