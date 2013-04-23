@@ -515,3 +515,102 @@ timetravel (command_stream_t c_stream)
 
   return 0;
 }
+
+bool
+check_dependence (command_t indep, command_t dep)
+{
+  if(indep->output && dep->input)
+    {
+      if(strcmp (indep->output, dep->input) == 0)
+        return true;
+    }
+
+  if(indep->output && dep->output)
+    {
+      if(strcmp (indep->output, dep->output) == 0)
+        return true;
+    }
+
+  // If both commands are SIMPLE_COMMANs compare all their words and their I/O
+  if(indep->type == SIMPLE_COMMAND && dep->type == SIMPLE_COMMAND)
+    {
+      // Skip the command names
+      char *wi = indep->u.word[1];
+      char *wd = dep->u.word[1];
+      while (*wi)
+        {
+          if( strcmp(wi, dep->input) == 0)
+            return true;
+
+          while (*wd)
+            {
+              if(strcmp (indep->output, wd) == 0 || strcmp (wi, wd) == 0)
+                return true;
+              wd++;
+            }
+            wi++;
+        }
+    }
+  else if(indep->type == SIMPLE_COMMAND) // dep is not a SIMPLE_COMMAND, compare only words in dep
+    {
+      char *wi = indep->u.word[1];
+      while (*wi)
+        {
+          if(strcmp (wi, dep->input) == 0)
+            return true;
+          wi++;
+        }
+    }
+  else // dep is a SIMPLE_COMMAND, indep is not
+    {
+      char *wd = dep->u.word[1];
+      while (*wd)
+        {
+          if(strcmp (indep->output, wd) == 0)
+            return true;
+          wd++;
+        }
+    }
+
+  // Traverse the independent command
+  switch (indep->type)
+    {
+      case SEQUENCE_COMMAND:
+      case PIPE_COMMAND:
+      case OR_COMMAND:
+      case AND_COMMAND:
+        if(check_dependence (indep->u.command[0], dep) || check_dependence (indep->u.command[1], dep))
+          return true;
+        break;
+
+      case SUBSHELL_COMMAND:
+        if(check_dependence (indep->u.subshell_command, dep))
+          return true;
+        break;
+
+      case SIMPLE_COMMAND: break;
+      default: break;
+    }
+
+  // Traverse the dependent command
+  switch (dep->type)
+    {
+      case SEQUENCE_COMMAND:
+      case PIPE_COMMAND:
+      case OR_COMMAND:
+      case AND_COMMAND:
+        if(check_dependence (indep, dep->u.command[0]) || check_dependence (indep, dep->u.command[1]))
+          return true;
+        break;
+
+      case SUBSHELL_COMMAND:
+        if(check_dependence (indep, dep->u.subshell_command))
+          return true;
+        break;
+
+      case SIMPLE_COMMAND: break;
+      default: break;
+    }
+
+  return false;
+}

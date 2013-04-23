@@ -265,3 +265,12 @@ char* get_redirect_file_path (char *redirect_file);
  * Executes command while parallelizing commands that do not share dependencies
  */
 int timetravel (command_stream_t c_stream);
+
+/**
+ * Checks whether dep has any dependencies based on indep. For example, if dep reads
+ * from a file with the same name as an argument to indep, or to one of indep's I/O
+ * files, it is dependent on it
+ *
+ * A true return value indicates a dependence is present.
+ */
+bool check_dependence (command_t indep, command_t dep);
