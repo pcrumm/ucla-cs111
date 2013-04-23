@@ -33,8 +33,8 @@ command_t read_command_stream (command_stream_t stream);
 /* Print a command to stdout, for debugging.  */
 void print_command (command_t, bool);
 
-/* Execute a command.  Use "time travel" if the flag is set.  */
-void execute_command (command_t, bool);
+/* Execute a single command tree. */
+void execute_command (command_t);
 
 /* Return the exit status of a command, which must have previously
    been executed.  Wait for the command, if it is not already finished.  */
@@ -260,3 +260,8 @@ void exec_utility (command_t c);
  * absolute path.
  */
 char* get_redirect_file_path (char *redirect_file);
+
+/**
+ * Executes command while parallelizing commands that do not share dependencies
+ */
+int timetravel (command_stream_t c_stream);

@@ -11,25 +11,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* FIXME: You may need to add #include directives, macro definitions,
-   static function definitions, etc.  */
-
-struct command_stream
-{
-  // An array of command pointers that are parsed from the stream.
-  command_t *commands;
-
-  // For iteration (obviously), holds the numerical index of the last traversed location.
-  int iterator;
-
-  // The number of commands we've placed in our stream
-  int stream_size;
-
-  // The number of spaces we've made available to add commands (through malloc). This should match
-  // stream_size when we're all said and done.
-  int alloc_size;
-};
-
 void
 free_command (command_t c)
 {

@@ -55,18 +55,22 @@ main (int argc, char **argv)
 
   command_t last_command = NULL;
   command_t command;
+
+  if (time_travel)
+    return timetravel (command_stream);
+
   while ((command = read_command_stream (command_stream)))
     {
       if (print_tree)
-	{
-	  printf ("# %d\n", command_number++);
-	  print_command (command, print_lines);
-	}
+        {
+          printf ("# %d\n", command_number++);
+          print_command (command, print_lines);
+        }
       else
-	{
-	  last_command = command;
-	  execute_command (command, time_travel);
-	}
+        {
+          last_command = command;
+          execute_command (command);
+        }
     }
 
   free_command_stream (command_stream);

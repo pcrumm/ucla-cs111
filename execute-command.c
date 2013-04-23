@@ -252,9 +252,11 @@ recursive_execute_command (command_t c, bool pipe_output)
 }
 
 void
-execute_command (command_t c, bool time_travel)
+execute_command (command_t c)
 {
-  (void)time_travel; // "Use" time_travel to avoid -Werror warnings
+  if(c == NULL)
+    return;
+
   recursive_execute_command (c, false);
 }
 
@@ -503,4 +505,13 @@ get_redirect_file_path (char *redirect_file)
   strcat (path, redirect_file);
 
   return path;
+}
+
+int
+timetravel (command_stream_t c_stream)
+{
+  if(c_stream == NULL || c_stream->stream_size == 0)
+    return 0;
+
+  return 0;
 }
