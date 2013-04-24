@@ -513,10 +513,38 @@ timetravel (command_stream_t c_stream)
   if(c_stream == NULL || c_stream->stream_size == 0)
     return 0;
 
+  // Each of these can be parallelized
+  command_stream_t* independent_streams = split_command_stream_by_dependencies (c_stream);
+  command_t current_command;
+
+  int i = 0;
+  pid_t pid;
+
+  for (i; independent_streams[i] != NULL; i++)
+  {
+    // Fork for each independent stream
+    pid = fork();
+
+    if (pid == 0) // We are in the child
+    {
+      while ((current_command = read_command_stream (independent_streams[i])) != NULL)
+      {
+        execute_command (current_command);
+      }
+
+      return 0; // And so it goes
+    }
+
+    // Otherwise, we are in the parent--continue on.
+  }
+
+  // At this point, everything on its own. There's no way to divine a
+  // meaningful exit condition, so we call the fact that we've gotten
+  // here "successful" and are now bailing out.
   return 0;
 }
 
-command_t*
+command_stream_t*
 split_command_stream_by_dependencies (command_stream_t c_stream)
 {
   return NULL;
