@@ -60,6 +60,94 @@ free_command_stream (command_stream_t cmd_stream)
   free (cmd_stream);
 }
 
+command_t
+deep_copy_command (command_t c)
+{
+  if(c == NULL)
+    return NULL;
+
+  command_t copy = checked_malloc (sizeof (struct command) * 1);
+
+  copy->type          = c->type;
+  copy->status        = c->status;
+  copy->pid           = c->pid;
+  copy->fd_writing_to = c->fd_writing_to;
+  copy->fd_read_from  = c->fd_read_from;
+  copy->line_number   = c->line_number;
+
+  if(c->input)
+    {
+      copy->input = checked_malloc (sizeof (char) * (strlen (c->input) + 1));
+      strcpy (copy->input, c->input);
+    }
+  else
+    {
+      copy->input = NULL;
+    }
+
+  if(c->output)
+    {
+      copy->output = checked_malloc (sizeof (char) * (strlen (c->output) + 1));
+      strcpy (copy->output, c->output);
+    }
+  else
+    {
+      copy->output = NULL;
+    }
+
+  switch (c->type)
+    {
+      case SEQUENCE_COMMAND:
+      case OR_COMMAND:
+      case AND_COMMAND:
+      case PIPE_COMMAND:
+        copy->u.command[0] = deep_copy_command (c->u.command[0]);
+        copy->u.command[1] = deep_copy_command (c->u.command[1]);
+        break;
+
+      case SUBSHELL_COMMAND:
+        copy->u.subshell_command = deep_copy_command (c->u.subshell_command);
+        break;
+
+      case SIMPLE_COMMAND:
+        {
+          char **w = c->u.word;
+          size_t word_size = 0;
+          size_t i;
+
+          while (*w)
+            {
+              word_size++;
+              w++;
+            }
+
+          // Handle "blank commands" which need to have two NULLs, one for u.word[0] and one to delimit the array
+          if(word_size == 0)
+            word_size++;
+
+          copy->u.word = checked_malloc (sizeof (char*) * (word_size + 1));
+
+          for(i = 0; i < word_size; i++)
+            {
+              // Again handle the case of "blank commands" without segfaulting on copying NULL strings
+              if(c->u.word[i] == NULL)
+                {
+                  copy->u.word[i] = NULL;
+                  continue;
+                }
+
+              copy->u.word[i] = checked_malloc (sizeof (char) * (strlen (c->u.word[i]) + 1));
+              strcpy (copy->u.word[i], c->u.word[i]);
+            }
+
+          copy->u.word[word_size] = NULL;
+          break;
+        }
+    }
+
+  return copy;
+}
+
 bool
 is_valid_token (char const *expr)
 {

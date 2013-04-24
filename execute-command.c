@@ -516,6 +516,12 @@ timetravel (command_stream_t c_stream)
   return 0;
 }
 
+command_t*
+split_command_stream_by_dependencies (command_stream_t c_stream)
+{
+  return NULL;
+}
+
 bool
 check_dependence (command_t indep, command_t dep)
 {
