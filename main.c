@@ -53,7 +53,7 @@ main (int argc, char **argv)
   command_stream_t command_stream =
     make_command_stream (get_next_byte, script_stream);
 
-  command_t last_command = NULL;
+  int status = 0;
   command_t command;
 
   if (time_travel)
@@ -65,14 +65,16 @@ main (int argc, char **argv)
         {
           printf ("# %d\n", command_number++);
           print_command (command, print_lines);
+
+          status = 0;
         }
       else
         {
-          last_command = command;
           execute_command (command);
+          status = command_status (command);
         }
     }
 
   free_command_stream (command_stream);
-  return print_tree || !last_command ? 0 : command_status (last_command);
+  return status;
 }
