@@ -547,38 +547,99 @@ timetravel (command_stream_t c_stream)
 command_stream_t*
 split_command_stream_by_dependencies (command_stream_t c_stream)
 {
-  return NULL;
+  size_t size = 1;
+  command_stream_t *array;
+  command_t current_command, sorted_command;
+
+  array = checked_malloc (sizeof (command_stream_t) * (size + 1));
+
+  if(c_stream == NULL || c_stream->stream_size == 0)
+    {
+      array[0] = NULL;
+      return array;
+    }
+
+  // Copy the first command as the start of an independent chunk, as it has no dependencies
+  array[0] = checked_malloc (sizeof (struct command_stream));
+  array[0]->iterator = 0;
+  array[0]->stream_size = 0;
+  array[0]->alloc_size = 1;
+  array[0]->commands = checked_malloc (array[0]->alloc_size * sizeof (command_t));
+
+  size = 1;
+  array[size] = NULL;
+
+  current_command = deep_copy_command (read_command_stream (c_stream));
+  add_command_to_stream (array[0], current_command);
+
+  int i;
+  size_t j;
+
+  // Offset i by 1 since we've already taken care of the first command
+  for(i = 1; i < c_stream->stream_size; i++)
+    {
+      current_command = c_stream->commands[i];
+      for(j = 0; j < size && current_command; j++)
+        {
+          // When we hit the end of the stream, the internal iterator is reset, so no need to do so manually
+          while((sorted_command = read_command_stream (array[j])))
+            {
+              if(check_dependence (sorted_command, current_command))
+                {
+                  // We haven't hit the end of the stream yet, we should reset the internal iterator
+                  add_command_to_stream(array[j], deep_copy_command (current_command));
+                  array[j]->iterator = 0;
+                  current_command = NULL;
+                  break;
+                }
+            }
+        }
+
+      if(current_command)
+        {
+          // No dependencies were found, create a new chunk
+          array = checked_realloc (array, sizeof (command_t) * (size + 1 + 1)); // Don't forget a space for NULL!
+
+          array[size] = checked_malloc (sizeof (struct command_stream));
+          array[size]->iterator = 0;
+          array[size]->stream_size = 0;
+          array[size]->alloc_size = 1;
+          array[size]->commands = checked_malloc (array[size]->alloc_size * sizeof (command_t));
+
+          add_command_to_stream (array[size], current_command);
+
+          size++;
+          array[size] = NULL;
+        }
+    }
+
+  array[size] = NULL;
+  return array;
 }
 
 bool
 check_dependence (command_t indep, command_t dep)
 {
-  if(indep->output && dep->input)
-    {
-      if(strcmp (indep->output, dep->input) == 0)
-        return true;
-    }
+  if(indep->output && dep->input && strcmp (indep->output, dep->input) == 0)
+    return true;
 
-  if(indep->output && dep->output)
-    {
-      if(strcmp (indep->output, dep->output) == 0)
-        return true;
-    }
+  if(indep->output && dep->output && strcmp (indep->output, dep->output) == 0)
+    return true;
 
   // If both commands are SIMPLE_COMMANs compare all their words and their I/O
   if(indep->type == SIMPLE_COMMAND && dep->type == SIMPLE_COMMAND)
     {
       // Skip the command names
-      char *wi = indep->u.word[1];
-      char *wd = dep->u.word[1];
+      char **wi = indep->u.word + 1;
       while (*wi)
         {
-          if( strcmp(wi, dep->input) == 0)
+          if( dep->input && strcmp(*wi, dep->input) == 0)
             return true;
 
+          char **wd = dep->u.word + 1;
           while (*wd)
             {
-              if(strcmp (indep->output, wd) == 0 || strcmp (wi, wd) == 0)
+              if((indep->output && strcmp (indep->output, *wd) == 0) || strcmp (*wi, *wd) == 0)
                 return true;
               wd++;
             }
@@ -587,20 +648,20 @@ check_dependence (command_t indep, command_t dep)
     }
   else if(indep->type == SIMPLE_COMMAND) // dep is not a SIMPLE_COMMAND, compare only words in dep
     {
-      char *wi = indep->u.word[1];
+      char **wi = indep->u.word + 1;
       while (*wi)
         {
-          if(strcmp (wi, dep->input) == 0)
+          if(dep->input && strcmp (*wi, dep->input) == 0)
             return true;
           wi++;
         }
     }
   else // dep is a SIMPLE_COMMAND, indep is not
     {
-      char *wd = dep->u.word[1];
+      char **wd = dep->u.word + 1;
       while (*wd)
         {
-          if(strcmp (indep->output, wd) == 0)
+          if(indep->output && strcmp (indep->output, *wd) == 0)
             return true;
           wd++;
         }
