@@ -517,10 +517,10 @@ timetravel (command_stream_t c_stream)
   command_stream_t* independent_streams = split_command_stream_by_dependencies (c_stream);
   command_t current_command;
 
-  int i = 0;
+  int i = 0, num_children = 0;
   pid_t pid;
 
-  for (i; independent_streams[i] != NULL; i++)
+  for (i = 0; independent_streams[i] != NULL; i++)
   {
     // Fork for each independent stream
     pid = fork();
@@ -536,7 +536,13 @@ timetravel (command_stream_t c_stream)
     }
 
     // Otherwise, we are in the parent--continue on.
+    num_children++;
   }
+
+  // We have to wait on all children to finish. Otherwise the
+  // shell will seem to have exited when commands are still running!
+  for(i = 0; i < num_children; i++)
+    wait(NULL);
 
   // At this point, everything on its own. There's no way to divine a
   // meaningful exit condition, so we call the fact that we've gotten
