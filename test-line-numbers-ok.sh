@@ -78,7 +78,7 @@ cat >test.exp <<'EOF'
  (line: 20)    g<h>i
 EOF
 
-../timetrash -p -n test.sh >test.out 2>test.err || ( echo "there were errors running $0: maybe an invalid syntax error was found" ; exit )
+../timetrash -p -l test.sh >test.out 2>test.err || ( echo "there were errors running $0: maybe an invalid syntax error was found" ; exit )
 
 diff -u test.exp test.out || exit
 test ! -s test.err || {

@@ -32,11 +32,11 @@ main (int argc, char **argv)
   program_name = argv[0];
 
   for (;;)
-    switch (getopt (argc, argv, "ptn"))
+    switch (getopt (argc, argv, "ptl"))
       {
       case 'p': print_tree = true; break;
       case 't': time_travel = true; break;
-      case 'n': print_lines = true; break;
+      case 'l': print_lines = true; break;
       default: usage (); break;
       case -1: goto options_exhausted;
       }
