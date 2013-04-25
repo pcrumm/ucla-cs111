@@ -148,6 +148,11 @@ bool is_valid_expression (const char *expr, int *expr_line_number);
 void add_expression_to_stream (const char *expr, command_stream_t stream, int line_number);
 
 /**
+ * Adds a command to a stream, reallocating the stream as necessary
+ */
+void add_command_to_stream (command_stream_t stream, command_t c);
+
+/**
  * Add the given string to the expression buffer and resize the buffer if necessary.
  */
 char* add_char_to_expression (char c, char *expr, size_t *expr_utilized, size_t *expr_size);
@@ -288,4 +293,4 @@ bool check_dependence (command_t indep, command_t dep);
  * All command_streams and command trees will be deep copied. It is up to the caller to
  * free the memory of the passed in argument, as well as the returned data.
  */
-command_t* split_command_stream_by_dependencies (command_stream_t c_stream);
+command_stream_t* split_command_stream_by_dependencies (command_stream_t c_stream);

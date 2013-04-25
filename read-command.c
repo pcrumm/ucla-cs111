@@ -937,7 +937,13 @@ token_ends_at_point (const char *expr, size_t point)
 void
 add_expression_to_stream (const char *expr, command_stream_t stream, int line_number)
 {
-  stream->commands[stream->stream_size++] = make_command_from_expression (expr, line_number+1);
+  add_command_to_stream (stream, make_command_from_expression (expr, line_number+1));
+}
+
+void
+add_command_to_stream (command_stream_t stream, command_t c)
+{
+  stream->commands[stream->stream_size++] = c;
 
   // Resize if we need to
   if (stream->stream_size == stream->alloc_size)
