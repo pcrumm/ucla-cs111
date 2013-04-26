@@ -18,6 +18,9 @@ struct command
   // Exit status, or -1 if not known (e.g., because it has not exited yet).
   int status;
 
+  // Since -1 can be shared by ran and unran processes, we explicitly track if this process is ran
+  bool ran;
+
   // I/O redirections, or null if none.
   char *input;
   char *output;

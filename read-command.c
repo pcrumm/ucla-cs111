@@ -70,6 +70,7 @@ deep_copy_command (command_t c)
 
   copy->type          = c->type;
   copy->status        = c->status;
+  copy->ran           = c->ran;
   copy->pid           = c->pid;
   copy->fd_writing_to = c->fd_writing_to;
   copy->fd_read_from  = c->fd_read_from;
@@ -568,6 +569,7 @@ recursive_build_command_from_expression (const char * const expr, int * const p_
     cmd->input = NULL;
     cmd->output = NULL;
     cmd->status = -1;
+    cmd->ran = false;
     cmd->pid = -1;
     cmd->fd_read_from = -1;
     cmd->fd_writing_to = -1;
