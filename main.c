@@ -56,7 +56,7 @@ main (int argc, char **argv)
   int status = 0;
   command_t command;
 
-  if (time_travel)
+  if (time_travel && !print_tree)
     return timetravel (command_stream);
 
   while ((command = read_command_stream (command_stream)))
