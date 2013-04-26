@@ -22,6 +22,10 @@ free_command (command_t c)
   free (c->input);
   free (c->output);
 
+  // We only want to free the array holding these pointers, not the actual
+  // contained pointers themselves.
+  free (c->dependencies);
+
   switch (c->type)
   {
     case AND_COMMAND:
@@ -75,6 +79,7 @@ deep_copy_command (command_t c)
   copy->fd_writing_to = c->fd_writing_to;
   copy->fd_read_from  = c->fd_read_from;
   copy->line_number   = c->line_number;
+  copy->dependencies  = c->dependencies;
 
   if(c->input)
     {
@@ -568,6 +573,7 @@ recursive_build_command_from_expression (const char * const expr, int * const p_
 
     cmd->input = NULL;
     cmd->output = NULL;
+    cmd->dependencies = NULL;
     cmd->status = -1;
     cmd->ran = false;
     cmd->pid = -1;

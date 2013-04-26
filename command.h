@@ -294,3 +294,15 @@ bool check_dependence (command_t indep, command_t dep);
  * free the memory of the passed in argument, as well as the returned data.
  */
 command_stream_t* split_command_stream_by_dependencies (command_stream_t c_stream);
+
+/**
+ * Add a dependency dep to the current command c's dependency list.
+ */
+bool add_dependency (command_t c, command_t dep);
+
+/**
+ * If one of c's dependencies has not yet ran, indicate such. This will return true
+ * if c has no depenencies, or if all of c's dependencies have already ran. It is
+ * up to the caller to make the appropriate distinction.
+ */
+bool has_unran_dependency (command_t c);

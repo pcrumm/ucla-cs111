@@ -715,3 +715,32 @@ check_dependence (command_t indep, command_t dep)
 
   return false;
 }
+
+bool
+add_dependency (command_t c, command_t dep)
+{
+  // We don't allow null commands or dependencies to be passed in
+  if (c == NULL || dep == NULL)
+    return false;
+
+  // The two extra spaces allow us to have a NULL pointer at the end
+  c->dependencies = checked_realloc (c->dependencies, sizeof (c->dependencies + 2 * (sizeof (command_t))));
+
+  c->dependencies[sizeof (c->dependencies) - 2] = dep;
+  c->dependencies[sizeof (c->dependencies) - 1] = NULL; // This should be the case already, but let's be safe.
+  
+  return true;
+}
+
+bool
+has_unran_dependency (command_t c)
+{
+  int i = 0;
+  for (i; c->dependencies[i] != NULL; i++)
+  {
+    if (c->dependencies[i]->ran == false)
+      return true;
+  }
+
+  return false;
+}

@@ -29,6 +29,9 @@ struct command
   int fd_read_from;   // Specified fd for the command to read from. -1 defaults to STDIN
   int fd_writing_to;  // Signifies the read end of the pipe being written to
 
+  // For parallelization, we need to track what exactly our command is dependent on.
+  command_t *dependencies;
+
   union
   {
     // for AND_COMMAND, SEQUENCE_COMMAND, OR_COMMAND, PIPE_COMMAND:
