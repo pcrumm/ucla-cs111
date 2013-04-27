@@ -251,13 +251,14 @@ recursive_execute_command (command_t c, bool pipe_output)
     }
 }
 
-void
+int
 execute_command (command_t c)
 {
   if(c == NULL)
-    return;
+    return -1;
 
   recursive_execute_command (c, false);
+  return c->status;
 }
 
 void
@@ -513,114 +514,75 @@ timetravel (command_stream_t c_stream)
   if(c_stream == NULL || c_stream->stream_size == 0)
     return 0;
 
-  // Each of these can be parallelized
-  command_stream_t* independent_streams = split_command_stream_by_dependencies (c_stream);
-  command_t current_command;
+  form_dependency_graph (c_stream);
 
-  int i = 0, num_children = 0;
-  pid_t pid;
+  int status;
+  int i = 0;
+  int num_finished = 0;
+  command_t c = NULL;
 
-  for (i = 0; independent_streams[i] != NULL; i++)
-  {
-    // Fork for each independent stream
-    pid = fork();
-
-    if (pid == 0) // We are in the child
+  while (num_finished < c_stream->stream_size)
     {
-      while ((current_command = read_command_stream (independent_streams[i])) != NULL)
-      {
-        execute_command (current_command);
-      }
+      c = c_stream->commands[i];
 
-      return 0; // And so it goes
-    }
-
-    // Otherwise, we are in the parent--continue on.
-    num_children++;
-  }
-
-  // We have to wait on all children to finish. Otherwise the
-  // shell will seem to have exited when commands are still running!
-  for(i = 0; i < num_children; i++)
-    wait(NULL);
-
-  // At this point, everything on its own. There's no way to divine a
-  // meaningful exit condition, so we call the fact that we've gotten
-  // here "successful" and are now bailing out.
-  return 0;
-}
-
-command_stream_t*
-split_command_stream_by_dependencies (command_stream_t c_stream)
-{
-  size_t size = 1;
-  command_stream_t *array;
-  command_t current_command, sorted_command;
-
-  array = checked_malloc (sizeof (command_stream_t) * (size + 1));
-
-  if(c_stream == NULL || c_stream->stream_size == 0)
-    {
-      array[0] = NULL;
-      return array;
-    }
-
-  // Copy the first command as the start of an independent chunk, as it has no dependencies
-  array[0] = checked_malloc (sizeof (struct command_stream));
-  array[0]->iterator = 0;
-  array[0]->stream_size = 0;
-  array[0]->alloc_size = 1;
-  array[0]->commands = checked_malloc (array[0]->alloc_size * sizeof (command_t));
-
-  size = 1;
-  array[size] = NULL;
-
-  current_command = deep_copy_command (read_command_stream (c_stream));
-  add_command_to_stream (array[0], current_command);
-
-  int i;
-  size_t j;
-
-  // Offset i by 1 since we've already taken care of the first command
-  for(i = 1; i < c_stream->stream_size; i++)
-    {
-      current_command = c_stream->commands[i];
-      for(j = 0; j < size && current_command; j++)
+      // If the command isn't currently running, hasn't finished, and all dependencies finished, start it!
+      if(c->pid < 0 && !c->finished_running && !has_unran_dependency (c))
         {
-          // When we hit the end of the stream, the internal iterator is reset, so no need to do so manually
-          while((sorted_command = read_command_stream (array[j])))
+          c->pid = fork();
+
+          if(c->pid == 0) // We are in the child
+            return execute_command (c);
+        }
+
+      // Use polling to see if the current command has finished
+      if(c->pid > -1 && !c->finished_running)
+        {
+          // A return of 0 means the child is not yet finished
+          // A return of -1 means an error, so we'll try again later
+          if(waitpid (c->pid, &status, WNOHANG) > 0)
             {
-              if(check_dependence (sorted_command, current_command))
-                {
-                  // We haven't hit the end of the stream yet, we should reset the internal iterator
-                  add_command_to_stream(array[j], deep_copy_command (current_command));
-                  array[j]->iterator = 0;
-                  current_command = NULL;
-                  break;
-                }
+              c->pid = -1;
+              c->finished_running = true;
+
+              // Check whether the child exited successfully
+              // If it exited due to a signal record the signal instead
+              if(WIFEXITED (status))
+                c->status = status = WEXITSTATUS (status);
+
+              num_finished++;
             }
         }
 
-      if(current_command)
-        {
-          // No dependencies were found, create a new chunk
-          array = checked_realloc (array, sizeof (command_t) * (size + 1 + 1)); // Don't forget a space for NULL!
-
-          array[size] = checked_malloc (sizeof (struct command_stream));
-          array[size]->iterator = 0;
-          array[size]->stream_size = 0;
-          array[size]->alloc_size = 1;
-          array[size]->commands = checked_malloc (array[size]->alloc_size * sizeof (command_t));
-
-          add_command_to_stream (array[size], current_command);
-
-          size++;
-          array[size] = NULL;
-        }
+      // Loop around the stream circularly
+      i++;
+      i = i % c_stream->stream_size;
     }
 
-  array[size] = NULL;
-  return array;
+  // Return the status of whichever command exited last
+  return status;
+}
+
+void form_dependency_graph (command_stream_t c_stream)
+{
+  // If there is only one command, the graph is done
+  if(c_stream == NULL || c_stream->stream_size == 1)
+    return;
+
+  int i, j;
+  command_t independent = NULL;
+  command_t dependent = NULL;
+
+  // We offset the beginning of our loop by 1 as the first command is always independent
+  for(i = 1; i < c_stream->stream_size; i++)
+    {
+      dependent = c_stream->commands[i];
+      for(j = 0; j < i; j++)
+        {
+          independent = c_stream->commands[j];
+          if(check_dependence (independent, dependent))
+            add_dependency (dependent, independent);
+        }
+    }
 }
 
 bool

@@ -33,8 +33,11 @@ command_t read_command_stream (command_stream_t stream);
 /* Print a command to stdout, for debugging.  */
 void print_command (command_t, bool);
 
-/* Execute a single command tree. */
-void execute_command (command_t);
+/**
+ * Execute a single command tree.
+ * Returns the exit status of the command tree.
+ */
+int execute_command (command_t);
 
 /* Return the exit status of a command, which must have previously
    been executed.  Wait for the command, if it is not already finished.  */
@@ -294,6 +297,18 @@ bool check_dependence (command_t indep, command_t dep);
  * free the memory of the passed in argument, as well as the returned data.
  */
 command_stream_t* split_command_stream_by_dependencies (command_stream_t c_stream);
+
+/**
+ * Produces a dependency graph between all commands within a stream by properly
+ * setting the pointers within the commands' dependencies array. A dependency is
+ * formed with any command appearing chronologically before it if they:
+ *
+ *  - write to the same file
+ *  - read from the same file
+ *  - the second reads from the file the first writes to
+ *  - any of their command arguments are identical
+ */
+void form_dependency_graph (command_stream_t c_stream);
 
 /**
  * Add a dependency dep to the current command c's dependency list.
