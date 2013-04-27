@@ -189,11 +189,6 @@ void show_error (int line_number, char *desc, char *desc2);
 bool expression_redirect_order_is_valid (const char *expr, int *line_number);
 
 /**
- * Produces a deep copy of a command
- */
-command_t deep_copy_command (command_t c);
-
-/**
  * EXECUTION
  */
 
@@ -287,16 +282,6 @@ int timetravel (command_stream_t c_stream);
  * A true return value indicates a dependence is present.
  */
 bool check_dependence (command_t indep, command_t dep);
-
-/**
- * Returns a NULL delimited command_stream_t array. Each entry holds a command_stream_t
- * all of whose commands have a dependency between them. Thus all commands within a
- * stream must be executed sequentially.
- *
- * All command_streams and command trees will be deep copied. It is up to the caller to
- * free the memory of the passed in argument, as well as the returned data.
- */
-command_stream_t* split_command_stream_by_dependencies (command_stream_t c_stream);
 
 /**
  * Produces a dependency graph between all commands within a stream by properly
