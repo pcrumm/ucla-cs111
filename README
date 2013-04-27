@@ -2,7 +2,7 @@ UCLA CS 111
 Professor Paul Eggert
 Spring 2013
 
-Lab 1A Time Travel Shell
+Lab 1C Time Travel Shell
 
 Phil Crumm 804-005-575
 Ivan Petkov 704-036-431
@@ -19,3 +19,8 @@ Current Concerns and Limitations:
   however, a semicolon is found in any level of nested subshells, it is
   parsed along inside the command tree as a sequence command.
 
+- If an error occurs while waiting on children in Time Travel mode, the
+  code will ignore it until it loops around and tries to wait on the pid
+  again. If for some unknown reason waiting on a specific pid with the
+  WNOHANG option fails every single time, our shell will be stuck in an
+  infinite loop.
