@@ -724,7 +724,10 @@ add_dependency (command_t c, command_t dep)
     return false;
 
   // The two extra spaces allow us to have a NULL pointer at the end
-  c->dependencies = checked_realloc (c->dependencies, sizeof (c->dependencies + 2 * (sizeof (command_t))));
+  if (c->dependencies == NULL)
+    c->dependencies = checked_malloc (2 * sizeof (command_t));
+  else // The old NULL value will get overwritten so we only need one additional space
+    c->dependencies = checked_realloc (c->dependencies, (sizeof (c->dependencies) + 1) * sizeof (command_t));
 
   c->dependencies[sizeof (c->dependencies) - 2] = dep;
   c->dependencies[sizeof (c->dependencies) - 1] = NULL; // This should be the case already, but let's be safe.
@@ -735,10 +738,10 @@ add_dependency (command_t c, command_t dep)
 bool
 has_unran_dependency (command_t c)
 {
-  int i = 0;
-  for (i; c->dependencies[i] != NULL; i++)
+  int i;
+  for (i = 0; c->dependencies[i] != NULL; i++)
   {
-    if (c->dependencies[i]->ran == false)
+    if (c->dependencies[i]->finished_running == false)
       return true;
   }
 

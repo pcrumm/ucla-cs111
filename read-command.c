@@ -72,14 +72,24 @@ deep_copy_command (command_t c)
 
   command_t copy = checked_malloc (sizeof (struct command) * 1);
 
-  copy->type          = c->type;
-  copy->status        = c->status;
-  copy->ran           = c->ran;
-  copy->pid           = c->pid;
-  copy->fd_writing_to = c->fd_writing_to;
-  copy->fd_read_from  = c->fd_read_from;
-  copy->line_number   = c->line_number;
-  copy->dependencies  = c->dependencies;
+  copy->type             = c->type;
+  copy->status           = c->status;
+  copy->finished_running = c->finished_running;
+  copy->pid              = c->pid;
+  copy->fd_writing_to    = c->fd_writing_to;
+  copy->fd_read_from     = c->fd_read_from;
+  copy->line_number      = c->line_number;
+
+  if(c->dependencies != NULL)
+    {
+      copy->dependencies = checked_malloc (sizeof (c->dependencies));
+      memcpy (copy->dependencies, c->dependencies, sizeof (c->dependencies));
+    }
+  else
+    {
+      copy->dependencies = NULL;
+    }
+
 
   if(c->input)
     {
@@ -575,7 +585,7 @@ recursive_build_command_from_expression (const char * const expr, int * const p_
     cmd->output = NULL;
     cmd->dependencies = NULL;
     cmd->status = -1;
-    cmd->ran = false;
+    cmd->finished_running = false;
     cmd->pid = -1;
     cmd->fd_read_from = -1;
     cmd->fd_writing_to = -1;

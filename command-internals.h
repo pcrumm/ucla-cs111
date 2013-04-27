@@ -19,7 +19,7 @@ struct command
   int status;
 
   // Since -1 can be shared by ran and unran processes, we explicitly track if this process is ran
-  bool ran;
+  bool finished_running;
 
   // I/O redirections, or null if none.
   char *input;
