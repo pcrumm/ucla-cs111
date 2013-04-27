@@ -589,6 +589,8 @@ recursive_build_command_from_expression (const char * const expr, int * const p_
     cmd->pid = -1;
     cmd->fd_read_from = -1;
     cmd->fd_writing_to = -1;
+    cmd->dep_alloc_size = 0;
+    cmd->dep_size = 0;
 
     cmd->type = token_type;
 

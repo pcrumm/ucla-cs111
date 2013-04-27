@@ -31,6 +31,8 @@ struct command
 
   // For parallelization, we need to track what exactly our command is dependent on.
   command_t *dependencies;
+  size_t dep_alloc_size;  // The size of the allocated array for dependencies
+  size_t dep_size;        // How many dependencies we've filled up
 
   union
   {
