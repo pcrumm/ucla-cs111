@@ -22,12 +22,12 @@ rm test test2
 EOF
 
 cat >test.exp <<'EOF'
-parallel
 12-point
 11-point
 10th
 10-point
 1080
+parallel
 intermixed parallelization
 passed
 hello, world

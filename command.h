@@ -35,9 +35,8 @@ void print_command (command_t, bool);
 
 /**
  * Execute a single command tree.
- * Returns the exit status of the command tree.
  */
-int execute_command (command_t);
+void execute_command (command_t c, bool timetravel);
 
 /* Return the exit status of a command, which must have previously
    been executed.  Wait for the command, if it is not already finished.  */
@@ -103,7 +102,9 @@ char* handle_and_strip_single_file_redirect (char const * const orig_expr, comma
 char* handle_and_strip_file_redirects (char const * const expr, command_t cmd, bool is_subshell_command);
 
 /**
- * Frees all memory associated with a command
+ * Frees all memory associated with a command.
+ * If the command has not finished executing, calling this function
+ * this will result in a BLOCKED wait.
  */
 void free_command (command_t c);
 
@@ -234,8 +235,14 @@ bool file_exists (char *path);
  * In the case of nested piping, file descriptors will be closed and forked processes
  * waited on after the outermost pipe has been set up. Thus we avoid deadlock in between
  * waiting on a nested pipe to exit while the outermost pipe is not being read from.
+ *
+ * In timetravel mode a process will be started, and if it has not finished by the time
+ * the function makes a nonblocking wait, no other processes will be started. Subsequent
+ * calls will result in either further commands in the tree being executed, as well as
+ * the current running command checked for completion. Once all commands have exited
+ * the topmost command's running and finished_running flags will be set accordingly.
  */
-void recursive_execute_command (command_t c, bool pipe_output);
+void recursive_execute_command (command_t c, bool timetravel, bool pipe_output);
 
 /**
  * Frees up CPU resources as a result of executing a command.
@@ -250,9 +257,10 @@ void recursive_execute_command (command_t c, bool pipe_output);
  * file descriptors closed and set to -1 as well.
  *
  * Calling this function will effectively block the process until the child command has
- * exited.
+ * exited when NOT running in timetravel mode. Otherwise the function will return and
+ * should be called on again at a later time to fully close resources.
  */
-void close_command_exec_resources (command_t c);
+void close_command_exec_resources (command_t c, bool timetravel);
 
 /**
  * Equivalent to the `exec` keyword in bash: the current process is replaced with a
@@ -275,9 +283,10 @@ char* get_redirect_file_path (char *redirect_file);
 int timetravel (command_stream_t c_stream);
 
 /**
- * Checks whether dep has any dependencies based on indep. For example, if dep reads
- * from a file with the same name as an argument to indep, or to one of indep's I/O
- * files, it is dependent on it
+ * Checks whether dep has any dependencies based on indep. Any time a command
+ * explicitly writes to a file that another command is reading, writing, or
+ * as it as an argument, this would cause a dependency between the two command.
+ * Parallel reads from the same destination are fine.
  *
  * A true return value indicates a dependence is present.
  */

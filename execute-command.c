@@ -35,9 +35,9 @@ show_error (int line_number, char *desc, char *desc2)
 }
 
 void
-close_command_exec_resources (command_t c)
+close_command_exec_resources (command_t c, bool timetravel)
 {
-  if(c == NULL)
+  if(c == NULL || c->finished_running)
     return;
 
   switch (c->type)
@@ -46,17 +46,33 @@ close_command_exec_resources (command_t c)
       case AND_COMMAND:
       case OR_COMMAND:
       case PIPE_COMMAND:
-        close_command_exec_resources (c->u.command[1]);
-        close_command_exec_resources (c->u.command[0]);
+        close_command_exec_resources (c->u.command[1], timetravel);
+        close_command_exec_resources (c->u.command[0], timetravel);
         break;
       case SUBSHELL_COMMAND:
-        close_command_exec_resources (c->u.subshell_command);
+        close_command_exec_resources (c->u.subshell_command, timetravel);
         break;
       case SIMPLE_COMMAND:
         if(c->pid > 0)
           {
             int exit_status;
-            waitpid (c->pid, &exit_status, 0);
+            int wait_options = 0;
+
+            if(timetravel)
+              wait_options |= WNOHANG;
+
+            // If waitpid fails, return and try again later
+            // On success the child pid is returned, which must be a
+            // positive non-zero integer
+            if (waitpid (c->pid, &exit_status, wait_options) <= 0)
+              {
+                c->finished_running = false;
+                return;
+              }
+
+            // Otherwise the process has exited
+            c->running = false;
+            c->finished_running = true;
 
             // Check whether the child exited successfully
             // If it exited due to a signal record the signal instead
@@ -67,49 +83,89 @@ close_command_exec_resources (command_t c)
         if(c->fd_read_from > -1)
           close (c->fd_read_from);
 
+        // Handle "blank" commands
+        if(c->u.word[0] == NULL)
+          c->finished_running = true;
+
         // fd_writing_to should be closed by its reader
         break;
       default: break;
     }
 
-    c->fd_read_from = -1;
-    c->fd_writing_to = -1;
-    c->pid = -1;
+  // Propagate the status to the parent
+  switch (c->type)
+    {
+      // SEQUENCE and PIPE commands are marked as running if either of their commands runs
+      // and they have finished running once both commands have
+      case SEQUENCE_COMMAND:
+      case PIPE_COMMAND:
+        c->status = command_status (c->u.command[1]);
+        c->running = c->u.command[0]->running || c->u.command[1]->running;
+        c->finished_running = c->u.command[0]->finished_running && c->u.command[1]->finished_running;
+        break;
 
-    // Propagate the status to the parent
-    switch (c->type)
+      case AND_COMMAND:
+        {
+          int cmd_num = 0;
+          if(command_status (c->u.command[0]) == 0)
+            cmd_num = 1;
+          else
+            cmd_num = 0;
+
+          c->status = command_status (c->u.command[cmd_num]);
+          c->running = c->u.command[cmd_num]->running;
+          c->finished_running = c->u.command[cmd_num]->finished_running;
+          break;
+        }
+
+      case OR_COMMAND:
+        {
+          int cmd_num = 0;
+          if(command_status (c->u.command[0]) == 0)
+            cmd_num = 0;
+          else
+            cmd_num = 1;
+
+          c->status = command_status (c->u.command[cmd_num]);
+          c->running = c->u.command[cmd_num]->running;
+          c->finished_running = c->u.command[cmd_num]->finished_running;
+          break;
+        }
+
+      case SUBSHELL_COMMAND:
+        c->status = command_status (c->u.subshell_command);
+        c->running = c->u.subshell_command->running;
+        c->finished_running = c->u.subshell_command->finished_running;
+        break;
+
+      case SIMPLE_COMMAND: break;
+      default: break;
+    }
+
+    // Be careful not to blow away open file descriptors unless the
+    // command or all of its children have fully exited!
+    if(c->finished_running)
       {
-        case SEQUENCE_COMMAND:
-        case PIPE_COMMAND:
-          c->status = command_status (c->u.command[1]);
-          break;
-
-        case AND_COMMAND:
-          if(command_status (c->u.command[0]) == 0)
-            c->status = command_status (c->u.command[1]);
-          else
-            c->status = command_status (c->u.command[0]);
-          break;
-
-        case OR_COMMAND:
-          if(command_status (c->u.command[0]) == 0)
-            c->status = command_status (c->u.command[0]);
-          else
-            c->status = command_status (c->u.command[1]);
-          break;
-
-        case SUBSHELL_COMMAND:
-          c->status = command_status (c->u.subshell_command);
-          break;
-
-        case SIMPLE_COMMAND: break;
-        default: break;
+        c->fd_read_from = -1;
+        c->fd_writing_to = -1;
+        c->pid = -1;
       }
 }
 
 void
-recursive_execute_command (command_t c, bool pipe_output)
+recursive_execute_command (command_t c, bool timetravel, bool pipe_output)
 {
+  // If we've finished running, there is nothing left to do
+  if(c == NULL || c->finished_running)
+    return;
+
+  // Otherwise, check to see if we are done and return
+  if(c->running)
+  {
+    close_command_exec_resources (c, timetravel);
+    return;
+  }
+
   // Copy any specified file descriptors down to the children
   switch (c->type)
     {
@@ -135,10 +191,14 @@ recursive_execute_command (command_t c, bool pipe_output)
   switch (c->type)
     {
       case SEQUENCE_COMMAND:
-        // Status of SEQUENCE_COMMAND is based on last executed command
-        recursive_execute_command (c->u.command[0], pipe_output);
-        recursive_execute_command (c->u.command[1], pipe_output);
-        c->status = command_status (c->u.command[1]);
+        // Run the second command after the first has finished. The only
+        // time a sequence command is encountered its in a subshell, so we
+        // won't be parallelizing anyway.
+        recursive_execute_command (c->u.command[0], timetravel, pipe_output);
+
+        if(c->u.command[0]->finished_running)
+          recursive_execute_command (c->u.command[1], timetravel, pipe_output);
+
         break;
 
       case SUBSHELL_COMMAND:
@@ -177,8 +237,7 @@ recursive_execute_command (command_t c, bool pipe_output)
             }
 
           // Status of SUBSHELL_COMMAND is the same as the command inside it
-          recursive_execute_command (c->u.subshell_command, pipe_output);
-          c->status = c->u.subshell_command->status;
+          recursive_execute_command (c->u.subshell_command, timetravel, pipe_output);
           c->fd_writing_to = c->u.subshell_command->fd_writing_to;
 
           // Reset stdin and stdout
@@ -190,75 +249,51 @@ recursive_execute_command (command_t c, bool pipe_output)
         }
 
       case AND_COMMAND:
-        // Status of AND_COMMAND is either the first failed command, or the last executed
-        recursive_execute_command (c->u.command[0], pipe_output);
+        recursive_execute_command (c->u.command[0], timetravel, pipe_output);
+
         if(command_status (c->u.command[0]) == 0)
-          {
-            recursive_execute_command (c->u.command[1], pipe_output);
-            c->status = command_status (c->u.command[1]);
-          }
-        else // first command has NOT exited successfully
-          {
-           c->status = command_status (c->u.command[0]);
-          }
+          recursive_execute_command (c->u.command[1], timetravel, pipe_output);
         break;
 
       case OR_COMMAND:
-        // Status of OR_COMMAND is either the first successful command, or the last executed
-        recursive_execute_command (c->u.command[0], pipe_output);
-        if(command_status (c->u.command[0]) == 0)
-          {
-            c->status = command_status (c->u.command[0]);
-          }
-        else
-          {
-            recursive_execute_command (c->u.command[1], pipe_output);
-            c->status = command_status (c->u.command[1]);
-          }
+        recursive_execute_command (c->u.command[0], timetravel, pipe_output);
+
+        if(command_status (c->u.command[0]) != 0)
+          recursive_execute_command (c->u.command[1], timetravel, pipe_output);
         break;
 
         case PIPE_COMMAND:
-          recursive_execute_command (c->u.command[0], true);
+          recursive_execute_command (c->u.command[0], timetravel, true);
 
           // Set the next command to read from the opened pipe
           c->u.command[1]->fd_read_from = c->u.command[0]->fd_writing_to;
 
-          recursive_execute_command (c->u.command[1], pipe_output);
+          recursive_execute_command (c->u.command[1], timetravel, pipe_output);
           c->fd_writing_to = c->u.command[1]->fd_writing_to;
-
-          // Close the resources if and only if we aren't in a nested pipe
-          // otherwise it's possible to cause a deadlock! Everything will get recursively
-          // freed in a higher frame anyways.
-          if(!pipe_output)
-            {
-              close_command_exec_resources (c->u.command[1]);
-              close_command_exec_resources (c->u.command[0]);
-            }
-
-          c->status = c->u.command[1]->status;
           break;
 
         case SIMPLE_COMMAND:
           execute_simple_command (c, pipe_output);
-
-          // Since we aren't piping we can go ahead and free any CPU resources
-          // Otherwise they will get freed when the pipe is completed
-          if(!pipe_output)
-              close_command_exec_resources (c);
           break;
 
         default: break;
     }
+
+    // Check to see if we are done. If not this will properly set up the run flags.
+    // Close the resources if and only if we aren't in a nested pipe
+    // otherwise it's possible to cause a deadlock! Everything will get recursively
+    // freed in a higher frame anyways.
+    if(!pipe_output)
+      close_command_exec_resources (c, timetravel);
 }
 
-int
-execute_command (command_t c)
+void
+execute_command (command_t c, bool timetravel)
 {
   if(c == NULL)
-    return -1;
+    return;
 
-  recursive_execute_command (c, false);
-  return c->status;
+  recursive_execute_command (c, timetravel, false);
 }
 
 void
@@ -356,6 +391,7 @@ execute_simple_command (command_t c, bool pipe_output)
   else // Parent process
   {
     c->pid = pid; // Set the child's PID
+    c->running = true;
 
     close (pipefd[PIPE_WRITE]);
 
@@ -516,7 +552,6 @@ timetravel (command_stream_t c_stream)
 
   form_dependency_graph (c_stream);
 
-  int status;
   int i = 0;
   int num_finished = 0;
   command_t c = NULL;
@@ -525,32 +560,17 @@ timetravel (command_stream_t c_stream)
     {
       c = c_stream->commands[i];
 
-      // If the command isn't currently running, hasn't finished, and all dependencies finished, start it!
-      if(c->pid < 0 && !c->finished_running && !has_unran_dependency (c))
+      // Since execute_command needs to be run to "finish" a command's execution
+      // it needs to go through execute_command if it's running. Otherwise, only
+      // run if all the dependencies have been satisfied.
+      if(c->running || !has_unran_dependency (c))
         {
-          c->pid = fork();
+          bool was_finished = c->finished_running;
 
-          if(c->pid == 0) // We are in the child
-            return execute_command (c);
-        }
+          execute_command (c, true);
 
-      // Use polling to see if the current command has finished
-      if(c->pid > -1 && !c->finished_running)
-        {
-          // A return of 0 means the child is not yet finished
-          // A return of -1 means an error, so we'll try again later
-          if(waitpid (c->pid, &status, WNOHANG) > 0)
-            {
-              c->pid = -1;
-              c->finished_running = true;
-
-              // Check whether the child exited successfully
-              // If it exited due to a signal record the signal instead
-              if(WIFEXITED (status))
-                c->status = status = WEXITSTATUS (status);
-
-              num_finished++;
-            }
+          if(!was_finished && c->finished_running)
+            num_finished++;
         }
 
       // Loop around the stream circularly
@@ -559,7 +579,7 @@ timetravel (command_stream_t c_stream)
     }
 
   // Return the status of whichever command exited last
-  return status;
+  return c->status;
 }
 
 void

@@ -17,7 +17,11 @@ free_command (command_t c)
   if(c == NULL)
     return;
 
-  close_command_exec_resources (c);
+  // If we are freeing command memory, lets make sure
+  // everything is actually closed. All execution should
+  // be done at this point anyway, so we can wait on each
+  // child until we know it has exited for sure.
+  close_command_exec_resources (c, false);
 
   free (c->input);
   free (c->output);
@@ -486,6 +490,7 @@ recursive_build_command_from_expression (const char * const expr, int * const p_
     cmd->dependencies = NULL;
     cmd->status = -1;
     cmd->finished_running = false;
+    cmd->running = false;
     cmd->pid = -1;
     cmd->fd_read_from = -1;
     cmd->fd_writing_to = -1;

@@ -20,6 +20,7 @@ struct command
 
   // Since -1 can be shared by ran and unran processes, we explicitly track if this process is ran
   bool finished_running;
+  bool running;
 
   // I/O redirections, or null if none.
   char *input;
