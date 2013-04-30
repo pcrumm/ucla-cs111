@@ -46,8 +46,8 @@ close_command_exec_resources (command_t c)
       case AND_COMMAND:
       case OR_COMMAND:
       case PIPE_COMMAND:
-        close_command_exec_resources (c->u.command[0]);
         close_command_exec_resources (c->u.command[1]);
+        close_command_exec_resources (c->u.command[0]);
         break;
       case SUBSHELL_COMMAND:
         close_command_exec_resources (c->u.subshell_command);
@@ -231,8 +231,8 @@ recursive_execute_command (command_t c, bool pipe_output)
           // freed in a higher frame anyways.
           if(!pipe_output)
             {
-              close_command_exec_resources (c->u.command[0]);
               close_command_exec_resources (c->u.command[1]);
+              close_command_exec_resources (c->u.command[0]);
             }
 
           c->status = c->u.command[1]->status;
