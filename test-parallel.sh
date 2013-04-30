@@ -10,11 +10,11 @@ mkdir "$tmp" || exit
 cd "$tmp" || exit
 
 cat >test.sh <<'EOF'
-cat /usr/share/dict/words | head -n 5 | sort -r; sleep 5; echo testing
+(cat /usr/share/dict/words | head -n 5 | sort -r; sleep 5; echo testing)
 
-echo intermixed parallelization; sleep 1
+(echo intermixed parallelization; sleep 1)
 
-echo hello, world > test; cat test > test2; cat test2;
+(echo hello, world > test; cat test > test2; cat test2)
 
 echo parallel
 EOF
@@ -22,13 +22,13 @@ EOF
 cat >test.exp <<'EOF'
 intermixed parallelization
 parallel
-testing
 12-point
 11-point
 10th
 10-point
 1080
 hello, world
+testing
 EOF
 
 ../timetrash -t test.sh >test.out 2>test.err || exit
