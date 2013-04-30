@@ -12,21 +12,24 @@ cd "$tmp" || exit
 cat >test.sh <<'EOF'
 (cat /usr/share/dict/words | head -n 5 | sort -r; sleep 5; echo testing)
 
-(echo intermixed parallelization; sleep 1)
+(sleep 1; echo intermixed parallelization; sleep 1; echo passed)
 
-(echo hello, world > test; cat test > test2; cat test2)
+(sleep 3; echo hello, world > test; cat test > test2; cat test2)
 
 echo parallel
+
+rm test test2
 EOF
 
 cat >test.exp <<'EOF'
-intermixed parallelization
 parallel
 12-point
 11-point
 10th
 10-point
 1080
+intermixed parallelization
+passed
 hello, world
 testing
 EOF
