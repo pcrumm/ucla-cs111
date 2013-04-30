@@ -562,7 +562,8 @@ timetravel (command_stream_t c_stream)
   return status;
 }
 
-void form_dependency_graph (command_stream_t c_stream)
+void
+form_dependency_graph (command_stream_t c_stream)
 {
   // If there is only one command, the graph is done
   if(c_stream == NULL || c_stream->stream_size == 1)
@@ -588,9 +589,11 @@ void form_dependency_graph (command_stream_t c_stream)
 bool
 check_dependence (command_t indep, command_t dep)
 {
+  // dep reads from the output of indep
   if(indep->output && dep->input && strcmp (indep->output, dep->input) == 0)
     return true;
 
+  // Both write into the same output
   if(indep->output && dep->output && strcmp (indep->output, dep->output) == 0)
     return true;
 
@@ -601,25 +604,27 @@ check_dependence (command_t indep, command_t dep)
       char **wi = indep->u.word + 1;
       while (*wi)
         {
-          if( dep->input && strcmp(*wi, dep->input) == 0)
+          // dep is writing into something indep is reading from
+          if(dep->output && strcmp (*wi, dep->output) == 0)
             return true;
 
           char **wd = dep->u.word + 1;
           while (*wd)
             {
-              if((indep->output && strcmp (indep->output, *wd) == 0) || strcmp (*wi, *wd) == 0)
+              // dep is reading from something that indep is writing to
+              if((indep->output && strcmp (indep->output, *wd) == 0))
                 return true;
               wd++;
             }
             wi++;
         }
     }
-  else if(indep->type == SIMPLE_COMMAND) // dep is not a SIMPLE_COMMAND, compare only words in dep
+  else if(indep->type == SIMPLE_COMMAND) // dep is not a SIMPLE_COMMAND, compare only words in indep
     {
       char **wi = indep->u.word + 1;
       while (*wi)
         {
-          if(dep->input && strcmp (*wi, dep->input) == 0)
+          if(dep->output && strcmp (*wi, dep->output) == 0)
             return true;
           wi++;
         }
