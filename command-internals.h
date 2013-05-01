@@ -30,6 +30,8 @@ struct command
   int fd_read_from;   // Specified fd for the command to read from. -1 defaults to STDIN
   int fd_writing_to;  // Signifies the read end of the pipe being written to
 
+  int max_pipe_procs; // Signifies the max number of possible needed concurrent processes due to piping
+
   // For parallelization, we need to track what exactly our command is dependent on.
   command_t *dependencies;
   size_t dep_alloc_size;  // The size of the allocated array for dependencies

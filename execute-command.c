@@ -552,20 +552,34 @@ timetravel (command_stream_t c_stream, int proc_limit)
     return 0;
 
   form_dependency_graph (c_stream);
+  set_max_pipe_command_count (c_stream);
+
+  // If no limit was set, use a fairly large number or processes instead
+  proc_limit = (proc_limit > 0 ? proc_limit : LONG_MAX);
 
   int i = 0;
   int num_finished = 0;
-  int num_free_procs = (proc_limit > 0 ? proc_limit : LONG_MAX);
+  int num_free_procs = proc_limit;
   command_t c = NULL;
 
   while (num_finished < c_stream->stream_size)
     {
       c = c_stream->commands[i];
 
+      // In order for a command to run it: must have no withstanding dependencies
+      // and there must be available processes (at or below the imposed limit).
+      // The only exception for honoring the imposed limit is when a chain of pipes
+      // needs more processes to run than the entire limit allows. In that case if
+      // there is no other process currently running, it is permissable to execute it.
+
+      bool no_dependencies = !has_unran_dependency (c);
+      bool proc_available = (num_free_procs > 0) && (c->max_pipe_procs <= num_free_procs) && no_dependencies;
+      bool pipe_exception = (c->max_pipe_procs > num_free_procs) && (num_free_procs == proc_limit) && no_dependencies;
+
       // Since execute_command needs to be run to "finish" a command's execution
       // it needs to go through execute_command if it's running. Otherwise, only
       // run if all the dependencies have been satisfied.
-      if(c->running || (num_free_procs > 0 && !has_unran_dependency (c)))
+      if(c->running || proc_available || pipe_exception)
         {
           bool was_finished;
           int previously_running;
@@ -759,6 +773,51 @@ has_unran_dependency (command_t c)
 
   return false;
 }
+
+int
+count_largest_set_of_pipe_operators (command_t c)
+{
+  if(c == NULL)
+    return 0;
+
+  switch(c->type)
+    {
+      case PIPE_COMMAND:
+        return 1 + count_largest_set_of_pipe_operators (c->u.command[0]) + count_largest_set_of_pipe_operators (c->u.command[1]);
+        break;
+      case SEQUENCE_COMMAND:
+      case AND_COMMAND:
+      case OR_COMMAND:
+        return count_largest_set_of_pipe_operators (c->u.command[0]) + count_largest_set_of_pipe_operators (c->u.command[1]);
+        break;
+      case SUBSHELL_COMMAND:
+        return count_largest_set_of_pipe_operators (c->u.subshell_command);
+        break;
+      case SIMPLE_COMMAND:
+        return 0;
+        break;
+      default:
+        return 0;
+        break;
+    }
+}
+
+void
+set_max_pipe_command_count (command_stream_t c_stream)
+{
+  if(c_stream == NULL)
+    return;
+
+  int i;
+  for(i = 0; i < c_stream->stream_size; i++)
+    {
+      // Don't forget, the number of max pipe processes needed
+      //is one more than the pipe operator count!
+      command_t c = c_stream->commands[i];
+      c->max_pipe_procs = count_largest_set_of_pipe_operators (c) + 1;
+    }
+}
+
 int
 count_running_processes (command_t c)
 {

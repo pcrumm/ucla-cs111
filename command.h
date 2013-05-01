@@ -323,3 +323,17 @@ bool has_unran_dependency (command_t c);
  * running (i.e. have an associated child fork that has not yet been closed)
  */
 int count_running_processes (command_t c);
+
+/**
+ * Counts up the largest set of chained pipe OPERATORS
+ * e.g. in `(a | b | c) ; (a | b | c | d)` it would return 3
+ * The number of actual processes needed will be 1 more!
+ */
+int count_largest_set_of_pipe_operators (command_t c);
+
+/**
+ * Counts up the actual number of max processes potentially
+ * needed as a result of chained pipes. This will set the
+ * max_pipe_procs variable at the *topmost* command only.
+ */
+void set_max_pipe_command_count (command_stream_t c_stream);
