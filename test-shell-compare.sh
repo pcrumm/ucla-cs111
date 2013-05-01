@@ -14,6 +14,6 @@ for file in ../shell-compare/* ; do
     diff -u bash.err tt.err || exit
   fi
 done
-) || exit
+)
 
-rm -fr $tmp
+rm -fr "$tmp"

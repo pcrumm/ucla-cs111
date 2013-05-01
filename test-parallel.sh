@@ -9,8 +9,16 @@ mkdir "$tmp" || exit
 (
 cd "$tmp" || exit
 
+echo "apples
+oranges
+bananas
+pears
+pineapples
+avocados
+mangoes" > fruit
+
 cat >test.sh <<'EOF'
-(cat /usr/share/dict/words | head -n 5 | sort -r; sleep 5; echo testing)
+(cat fruit | head -n 5 | sort -r; sleep 5; echo testing)
 
 (sleep 1; echo intermixed parallelization; sleep 1; echo passed)
 
@@ -22,11 +30,11 @@ rm test test2
 EOF
 
 cat >test.exp <<'EOF'
-12-point
-11-point
-10th
-10-point
-1080
+pineapples
+pears
+oranges
+bananas
+apples
 parallel
 intermixed parallelization
 passed
