@@ -278,9 +278,11 @@ void exec_utility (command_t c);
 char* get_redirect_file_path (char *redirect_file);
 
 /**
- * Executes command while parallelizing commands that do not share dependencies
+ * Executes command while parallelizing commands that do not share dependencies.
+ * If proc_limit is greater than zero, no more than proc_limit concurrent
+ * processes will be run
  */
-int timetravel (command_stream_t c_stream);
+int timetravel (command_stream_t c_stream, int proc_limit);
 
 /**
  * Checks whether dep has any dependencies based on indep. Any time a command
@@ -315,3 +317,9 @@ bool add_dependency (command_t c, command_t dep);
  * up to the caller to make the appropriate distinction.
  */
 bool has_unran_dependency (command_t c);
+
+/**
+ * Counts the number of commands inside of a command tree that are currently
+ * running (i.e. have an associated child fork that has not yet been closed)
+ */
+int count_running_processes (command_t c);

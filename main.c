@@ -4,6 +4,9 @@
 #include <error.h>
 #include <getopt.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <ctype.h>
 
 #include "command.h"
 
@@ -13,7 +16,7 @@ static char const *script_name;
 static void
 usage (void)
 {
-  error (1, 0, "usage: %s [-pt] SCRIPT-FILE", program_name);
+  error (1, 0, "usage: %s [-p] [-t | [-n <NUM SUBPROCESSES>]] SCRIPT-FILE", program_name);
 }
 
 static int
@@ -23,20 +26,66 @@ get_next_byte (void *stream)
 }
 
 int
+validate_subproc_argument (const char *arg)
+{
+  const char bad_arg_msg[] = "%s: <NUM SUBPROCESSES> must be a non-negative integer\n";
+  const char out_of_bounds_msg[] = "%s: <NUM SUBPROCESSES> out of bounds\n";
+  const char *p;
+  int n;
+
+  // Null arguments are invalid. getopt should report if the argument is missing, however...
+  if (arg == NULL)
+    {
+      fprintf (stderr, bad_arg_msg, program_name);
+      usage ();
+    }
+
+  // Check that the argument is a valid int
+  p = arg;
+  while(*p)
+    {
+      if (!isdigit (*p++))
+        {
+          fprintf (stderr, bad_arg_msg, program_name);
+          usage ();
+        }
+    }
+
+  // Check for overflows
+  n = strtol (optarg, NULL, 10);
+  if( (n == LONG_MAX || n == LONG_MAX) && errno == ERANGE )
+    {
+      fprintf (stderr, out_of_bounds_msg, program_name);
+      usage ();
+    }
+
+  // n must be a non-negative integer
+  if(n <= 0)
+    {
+      fprintf (stderr, bad_arg_msg, program_name);
+      usage ();
+    }
+
+  return n;
+}
+
+int
 main (int argc, char **argv)
 {
   int command_number = 1;
+  int num_processes = 0;
   bool print_tree = false;
   bool time_travel = false;
   bool print_lines = false;
   program_name = argv[0];
 
   for (;;)
-    switch (getopt (argc, argv, "ptl"))
+    switch (getopt (argc, argv, "ptln:"))
       {
       case 'p': print_tree = true; break;
       case 't': time_travel = true; break;
       case 'l': print_lines = true; break;
+      case 'n': num_processes = validate_subproc_argument (optarg); break;
       default: usage (); break;
       case -1: goto options_exhausted;
       }
@@ -58,7 +107,10 @@ main (int argc, char **argv)
 
   if (time_travel && !print_tree)
     {
-      int status = timetravel (command_stream);
+      if(num_processes > 0)
+        fprintf (stderr, "%s: using limit of %i subprocesses\n", program_name, num_processes);
+
+      int status = timetravel (command_stream, num_processes);
       free_command_stream (command_stream);
       return status;
     }

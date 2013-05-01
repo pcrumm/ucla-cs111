@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 
 #define PIPE_READ 0
 #define PIPE_WRITE 1
@@ -545,7 +546,7 @@ get_redirect_file_path (char *redirect_file)
 }
 
 int
-timetravel (command_stream_t c_stream)
+timetravel (command_stream_t c_stream, int proc_limit)
 {
   if(c_stream == NULL || c_stream->stream_size == 0)
     return 0;
@@ -554,6 +555,7 @@ timetravel (command_stream_t c_stream)
 
   int i = 0;
   int num_finished = 0;
+  int num_free_procs = (proc_limit > 0 ? proc_limit : LONG_MAX);
   command_t c = NULL;
 
   while (num_finished < c_stream->stream_size)
@@ -563,12 +565,32 @@ timetravel (command_stream_t c_stream)
       // Since execute_command needs to be run to "finish" a command's execution
       // it needs to go through execute_command if it's running. Otherwise, only
       // run if all the dependencies have been satisfied.
-      if(c->running || !has_unran_dependency (c))
+      if(c->running || (num_free_procs > 0 && !has_unran_dependency (c)))
         {
-          bool was_finished = c->finished_running;
+          bool was_finished;
+          int previously_running;
+          int currently_running;
+
+          was_finished = c->finished_running;
+          previously_running = count_running_processes (c);
 
           execute_command (c, true);
 
+          currently_running = count_running_processes (c);
+
+          if(previously_running > currently_running)
+            {
+              // We've closed some commands! Free up some processes resources!
+              num_free_procs += (previously_running - currently_running);
+            }
+          else if(currently_running > previously_running)
+            {
+              // We've opened up some commands instead! Decrease the available resources!
+              num_free_procs -= (currently_running - previously_running);
+            }
+          // else no net change!
+
+          // Record the program has finished running
           if(!was_finished && c->finished_running)
             num_finished++;
         }
@@ -736,4 +758,30 @@ has_unran_dependency (command_t c)
   }
 
   return false;
+}
+int
+count_running_processes (command_t c)
+{
+  if(c == NULL)
+    return 0;
+
+  switch (c->type)
+    {
+      case SEQUENCE_COMMAND:
+      case PIPE_COMMAND:
+      case AND_COMMAND:
+      case OR_COMMAND:
+        return count_running_processes (c->u.command[0]) + count_running_processes (c->u.command[1]);
+        break;
+      case SUBSHELL_COMMAND:
+        return count_running_processes (c->u.subshell_command);
+        break;
+      case SIMPLE_COMMAND:
+        if(c->running && c->pid > 0)
+          return 1;
+        break;
+      default: break;
+    }
+
+    return 0;
 }
