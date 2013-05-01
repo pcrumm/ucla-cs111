@@ -1,0 +1,94 @@
+%----------------------------------------------------------------------------------------
+%	PACKAGES AND OTHER DOCUMENT CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+
+\documentclass[paper=letter, fontsize=11pt]{scrartcl} % A4 paper and 11pt font size
+
+\usepackage[T1]{fontenc} % Use 8-bit encoding that has 256 glyphs
+\usepackage{fourier} % Use the Adobe Utopia font for the document - comment this line to return to the LaTeX default
+\usepackage[english]{babel} % English language/hyphenation
+\usepackage{amsmath,amsfonts,amsthm} % Math packages
+
+\usepackage{caption}
+
+\usepackage{sectsty} % Allows customizing section commands
+\allsectionsfont{\centering \normalfont\scshape} % Make all sections centered, the default font and small caps
+
+\usepackage{fancyhdr} % Custom headers and footers
+\pagestyle{fancyplain} % Makes all pages in the document conform to the custom headers and footers
+\fancyhead[R]{Phil Crumm 804-005-575 | Ivan Petkov 704-036-431}
+\fancyfoot[L]{} % Empty left footer
+\fancyfoot[C]{} % Empty center footer
+\fancyfoot[R]{\thepage} % Page numbering for right footer
+\renewcommand{\headrulewidth}{0pt} % Remove header underlines
+\renewcommand{\footrulewidth}{0pt} % Remove footer underlines
+\setlength{\headheight}{13.6pt} % Customize the height of the header
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+
+\newcommand{\horrule}[1]{\rule{\linewidth}{#1}}
+
+\title{	
+\normalfont \normalsize 
+\textsc{University of California, Los Angeles} \\ [25pt]
+\horrule{0.5pt} \\[0.4cm] % Thin top horizontal rule
+\Large Computer Science 111 - Operating System Principles \\ % The assignment title
+\horrule{2pt} \\[0.5cm] % Thick bottom horizontal rule
+}
+
+\author{Phillip Crumm \\*804-005-575 \\* Ivan Petkov \\* 704-036-431 \\* \\*Design Project - Project 1C}
+
+\date{\normalsize May 3, 2013} 
+\usepackage[parfill]{parskip}
+\begin{document}
+
+\clearpage\maketitle % Print the title
+
+\thispagestyle{empty}
+
+\pagebreak % Head to a new page
+
+%----------------------------------------------------------------------------------------
+%	The body
+%----------------------------------------------------------------------------------------
+
+\section{Design Specification}
+\subsection{Problem}
+
+Users of our \emph{timetrash} shell may wish to limit the amount of parallelization our shell performs. The most logical basis for this concern is that of performance: for a very large shell script, it is wholly possible that the shell may spawn a large enough number of concurrent child processes to cannibalize system resources from other simultaneous tasks.
+
+To resolve this problem, we introduce a \emph{-n} argument that allows the user to specify an arbitrary limit to the number of child processes our shell will spawn at any given time.
+
+\subsection{Implementation}
+\subsubsection{The -n Argument}
+At runtime, the user is allowed to specify a \emph{-n X} argument, where X is any positive integer greater than 0. Should the user attempt to specify a non-integer value (for example, a float or a character string), the program ceases execution and displays an error.
+
+If specified, the program will run at most X simultaneous processes in executing, execept in cases noted below as Degenerative Behavior. Otherwise, we set an arbitrarily high (the integer maximum) limit for the number of available processes to run. This arbitrary limit is in place to simplify our design implementation (we can be consistent in checks regardless of whether a limit was set). The integer maximum was selected as a safe limit as no reasonable shell script will ever need to use billions of child processes; in the case that we do encounter a program with a higher limit, it is safe to limit the execution of the program to this number. We considered selecting a much lower arbitrary limit in order to ensure that system performance does not degrade, but elected to instead rely on the user to draft a reasonable shell script for execution and specify a reasonable process limit.
+
+\subsubsection{Tracking the Number of Running Subprocesses}
+To track the number of running subprocesses, we add a num\_free\_procs variable to our timetravel() function. This number is instantiated at the specified process limit X from the user's invocation of the timetrash shell.
+
+We then continue to iterate over our command tree as previous. If we have available free processes and the current command has not ran, we run the command as normal, and decrement our total number of free processes. Otherwise, if the current command was previously running, we check if has finished since our last visit to this index of the command tree. If it has, we add the previously utilized processes to our number of free processes, and continue.
+
+At the invocation and exit of each command, we run a helper count\_running\_processes(). This recursively analyzes the command tree (using the current command as the tree's root) and determines the number of processes we must run simultaneously in order to execute the command.
+
+For a simple command, this number is (obviously) 1. In the case of commands piped together with P pipes (for instance, \emph{a | b}, which uses $P = 1$), we must use $P + 1$ simultaneously running processes to complete the execution--the function properly calculates and returns this value.
+
+\subsubsection{Degenerative Behavior}
+Consider the case where a command is ran that has $P > X$, where P is the number of processes necessary to run a given command and X is the process limit. The most natural example of this case is an instance of $P - 1$ chained pipes, e.g. \emph{a | b | c | ... | z}.
+
+We will first run all other processes that do not require the current number of processes to exceed $X$. When only command $P$ is left to be ran, we will exceed the process limit $X$ and run $P$ simultaneous processes in order to complete the execution of the command. This is because the pipe chain requires $P$ commands in order to have readers and writers available in all portions of the chain (to prevent deadlocking).
+
+In all other cases, the number of running commands will never exceed $X$.
+
+\subsection{Result Summary}
+Our implementation behaves as expect (i.e. as described above). We initially attempted to consider an implementation that did not causes the Degenerative Behavior described above, but determined that this was unfavorable due to the need to use internal buffers (or temporary files) to attach to pipes to allow the earlier portions of the pipe chain to complete execution. This would create significant performance degradation, and add several degrees of complexity to the program. We ultimately elected to allow the Degenerative Behavior and rely on the user to select a reasonable value for the process limit in cases where a large number of pipes may be present.
+
+\subsection{Division of Labor}
+Mr. Crumm and Mr. Petkov met to discuss the design problem and together formulated the specifics of the design implementation elaborated upon above. Mr. Crumm drafted the design specification, while Mr. Petkov drafted the actual initial implementation. Both contributed error fixes and test cases to verify the proper function and performance of the implementation.
+
+%----------------------------------------------------------------------------------------
+
+\end{document}
