@@ -53,7 +53,7 @@ validate_subproc_argument (const char *arg)
 
   // Check for overflows
   n = strtol (optarg, NULL, 10);
-  if( (n == LONG_MAX || n == LONG_MAX) && errno == ERANGE )
+  if( (n == INT_MAX || n == INT_MAX) && errno == ERANGE )
     {
       fprintf (stderr, out_of_bounds_msg, program_name);
       usage ();

@@ -555,7 +555,7 @@ timetravel (command_stream_t c_stream, int proc_limit)
   set_max_pipe_command_count (c_stream);
 
   // If no limit was set, use a fairly large number or processes instead
-  proc_limit = (proc_limit > 0 ? proc_limit : LONG_MAX);
+  proc_limit = (proc_limit > 0 ? proc_limit : INT_MAX);
 
   int i = 0;
   int num_finished = 0;
