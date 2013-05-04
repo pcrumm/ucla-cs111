@@ -64,6 +64,9 @@ typedef struct osprd_info {
 	/* HINT: You may want to add additional fields to help
 	         in detecting deadlock. */
 
+  unsigned num_read_locks;
+  unsigned num_write_locks;
+
 	// The following elements are used internally; you don't need
 	// to understand them.
 	struct request_queue *queue;    // The device request queue.
@@ -98,6 +101,16 @@ static void for_each_open_file(struct task_struct *task,
 						osprd_info_t *user_data),
 			       osprd_info_t *user_data);
 
+/**
+ * Releases any read/write lock for a given file
+ * and modifies the relevant osprd_info_t as appropriate and clears
+ * F_OSPRD_LOCKED from filp->f_flags. If the file was locked, the entire
+ * wait queue is woken up after the lock is removed.
+ *
+ * returns 0 on success
+ * return -EINVAL if filp is NULL or is not locked
+ */
+static int release_file_lock(struct file *filp);
 
 /*
  * osprd_process_request(d, req)
@@ -180,20 +193,11 @@ static int osprd_open(struct inode *inode, struct file *filp)
 // last copy is closed.)
 static int osprd_close_last(struct inode *inode, struct file *filp)
 {
-	if (filp) {
-		osprd_info_t *d = file2osprd(filp);
-		int filp_writable = filp->f_mode & FMODE_WRITE;
+	// EXERCISE: If the user closes a ramdisk file that holds
+	// a lock, release the lock.  Also wake up blocked processes
+	// as appropriate.
 
-		// EXERCISE: If the user closes a ramdisk file that holds
-		// a lock, release the lock.  Also wake up blocked processes
-		// as appropriate.
-
-		// Your code here.
-
-		// This line avoids compiler warnings; you may remove it.
-		(void) filp_writable, (void) d;
-
-	}
+	release_file_lock(filp);
 
 	return 0;
 }
@@ -202,6 +206,34 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 /*
  * osprd_lock
  */
+static int release_file_lock(struct file *filp)
+{
+  if (filp) {
+    osprd_info_t *d = file2osprd(filp);
+    int filp_writable = filp->f_mode & FMODE_WRITE;
+    int filp_locked = filp->f_flags & F_OSPRD_LOCKED;
+
+    if(filp_locked)
+    {
+      spin_lock(&d->mutex);
+
+      if(filp_writable)
+        d->num_write_locks--;
+      else // file open for reading
+        d->num_read_locks--;
+
+      spin_unlock(&d->mutex);
+
+      // Clear the file's locked bit
+      filp->f_flags &= ~F_OSPRD_LOCKED;
+
+      wake_up_all(&d->blockq);
+      return 0;
+    }
+  }
+
+  return -EINVAL;
+}
 
 /*
  * osprd_ioctl(inode, filp, cmd, arg)
@@ -284,8 +316,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// the wait queue, perform any additional accounting steps
 		// you need, and return 0.
 
-		// Your code here (instead of the next line).
-		r = -ENOTTY;
+		return release_file_lock(filp);
 
 	} else
 		r = -ENOTTY; /* unknown command */
@@ -302,6 +333,9 @@ static void osprd_setup(osprd_info_t *d)
 	osp_spin_lock_init(&d->mutex);
 	d->ticket_head = d->ticket_tail = 0;
 	/* Add code here if you add fields to osprd_info_t. */
+
+  d->num_read_locks = 0;
+  d->num_write_locks = 0;
 }
 
 
