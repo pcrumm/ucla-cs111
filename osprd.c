@@ -106,6 +106,9 @@ static void for_each_open_file(struct task_struct *task,
  */
 static void osprd_process_request(osprd_info_t *d, struct request *req)
 {
+  size_t offset;
+  size_t num_bytes;
+
 	if (!blk_fs_request(req)) {
 		end_request(req, 0);
 		return;
@@ -119,8 +122,39 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 	// Consider the 'req->sector', 'req->current_nr_sectors', and
 	// 'req->buffer' members, and the rq_data_dir() function.
 
-	// Your code here.
-	eprintk("Should process request...\n");
+  if (req->sector < 0 || req->sector >= nsectors)
+  {
+    // sector_t is defined as an unsigned long in <linux/types.h>
+    eprintk("Invalid sector requested: [%lu]. max sectors: [%i]\n", (unsigned long)req->sector, nsectors);
+    end_request(req, 0);
+  }
+
+  offset = req->sector * SECTOR_SIZE;
+
+  // If the number of requested sectors would reach the end of the disk
+  // use as many sectors as possible until the end is reached
+  if(req->sector + req->current_nr_sectors > nsectors)
+  {
+    num_bytes = (nsectors - req->sector) * SECTOR_SIZE;
+    eprintk("Requested sector [%lu] with [%u] additional sectors.\n", (unsigned long)req->sector, req->current_nr_sectors);
+    eprintk("Using [%u] additional sectors instead.\n", num_bytes / SECTOR_SIZE);
+  }
+  else
+  {
+    num_bytes = req->current_nr_sectors * SECTOR_SIZE;
+  }
+
+  // According to http://www.makelinux.net/ldd3/chp-16-sect-3
+  // it is save to dereference req->buffer and write to it.
+
+  // Note from @ipetkov: I'm not sure if req->buffer needs to
+  // be resized at all, I'm assuming linux will allocate the
+  // memory before the request is sent. No issues are apparent
+  // from the first 8 default test cases.
+  if(rq_data_dir(req) == READ)
+    memcpy(req->buffer, d->data + offset, num_bytes);
+  else // WRITE
+    memcpy(d->data + offset, req->buffer, num_bytes);
 
 	end_request(req, 1);
 }
