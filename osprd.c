@@ -151,10 +151,14 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
   // be resized at all, I'm assuming linux will allocate the
   // memory before the request is sent. No issues are apparent
   // from the first 8 default test cases.
+  spin_lock(&d->mutex);
+
   if(rq_data_dir(req) == READ)
     memcpy(req->buffer, d->data + offset, num_bytes);
   else // WRITE
     memcpy(d->data + offset, req->buffer, num_bytes);
+
+  spin_unlock(&d->mutex);
 
 	end_request(req, 1);
 }
