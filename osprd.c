@@ -248,8 +248,19 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 	// is file open for writing?
 	int filp_writable = (filp->f_mode & FMODE_WRITE) != 0;
 
-	// This line avoids compiler warnings; you may remove it.
-	(void) filp_writable, (void) d;
+	// Determine if the device is currently locked
+	int filp_locked = filp->f_flags & F_OSPRD_LOCKED;
+
+	// Used to track the current request
+	unsigned local_ticket = d->ticket_head;
+	
+	spin_lock(&d->mutex);
+	if (d->ticket_head < d->ticket_tail)
+		d->ticket_head++;
+
+	if (d->ticket_head > d->ticket_tail)
+		d->ticket_head = 0;
+	spin_unlock(&d->mutex);
 
 	// Set 'r' to the ioctl's return value: 0 on success, negative on error
 
@@ -261,7 +272,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// to write-lock the ramdisk; otherwise attempt to read-lock
 		// the ramdisk.
 		//
-                // This lock request must block using 'd->blockq' until:
+        // This lock request must block using 'd->blockq' until:
 		// 1) no other process holds a write lock;
 		// 2) either the request is for a read lock, or no other process
 		//    holds a read lock; and
@@ -290,9 +301,79 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// (Some of these operations are in a critical section and must
 		// be protected by a spinlock; which ones?)
 
-		// Your code here (instead of the next two lines).
-		eprintk("Attempting to acquire\n");
-		r = -ENOTTY;
+		// @todo deadlock checking
+		if (filp_writable)
+		{
+			spin_lock(&d->mutex);
+
+			// By above, we queue ourselves if there is a read or write lock
+			if (d->num_write_locks > 0 || d->num_read_locks > 0)
+			{
+				if (filp_locked)
+				{
+					d->ticket_tail++;
+					spin_unlock(&d->mutex);
+
+					// We can't do much more here, so let everything else try
+					wait_event_interruptible(d->blockq, (d->ticket_head == local_ticket && d->num_write_locks == 0 && d->num_read_locks == 0));
+
+					spin_lock(&d->mutex);
+
+					// This means we got nailed by a signal while waiting. Return -ERESTARTSYS
+					if (signal_pending(current))
+					{
+						spin_unlock(&d->mutex);
+						return -ERESTARTSYS;
+					}
+
+				}
+			}
+
+			// We now hold the lock
+			filp->f_flags |= F_OSPRD_LOCKED;
+			d->num_write_locks++;
+
+			d->ticket_head = 0; // maintain FIFO
+
+			spin_unlock(&d->mutex);
+
+			// The lock state is held: get out
+			return 0;
+		}
+
+		else // read lock
+		{
+			spin_lock(&d->mutex);
+
+			// Similarly, queue all reads if there is a write in progress.
+			if (d->num_write_locks > 0)
+			{
+				if (filp_locked)
+				{
+					d->ticket_tail++;
+
+					spin_unlock(&d->mutex);
+					wait_event_interruptible(d->blockq, d->ticket_head == local_ticket && d->num_write_locks == 0);
+
+					// We're running again
+
+					spin_lock(&d->mutex);
+					if (signal_pending(current))
+					{
+						spin_unlock(&d->mutex);
+						return -ERESTARTSYS;
+					}
+				}
+			}
+			
+			filp->f_flags |= F_OSPRD_LOCKED;
+			d->num_read_locks++;
+
+			d->ticket_head = 0;
+
+			spin_unlock(&d->mutex);
+			return 0;
+		}
 
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
 
@@ -303,9 +384,48 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// OSPRDIOCTRYACQUIRE should return -EBUSY.
 		// Otherwise, if we can grant the lock request, return 0.
 
-		// Your code here (instead of the next two lines).
-		eprintk("Attempting to try acquire\n");
-		r = -ENOTTY;
+		if (filp_writable)
+		{
+			spin_lock(&d->mutex);
+
+			// We can only write if there are no read or write locks
+			if (d->num_read_locks != 0 || d->num_write_locks != 0)
+			{
+				spin_unlock(&d->mutex);
+				return -EBUSY;
+			}
+
+			// Otherwise, grab the lock!
+			else
+			{
+				d->num_write_locks++;
+				filp->f_flags |= F_OSPRD_LOCKED;
+				spin_unlock(&d->mutex);
+
+				return 0;
+			}
+		}
+
+		else
+		{
+			spin_lock(&d->mutex);
+
+			// For reads, we only block if there is a write
+			if (d->num_write_locks > 0)
+			{
+				spin_unlock(&d->mutex);
+				return -EBUSY;
+			}
+
+			else
+			{
+				d->num_read_locks++;
+				filp->f_flags |= F_OSPRD_LOCKED;
+				spin_unlock(&d->mutex);
+
+				return 0;
+			}
+		}
 
 	} else if (cmd == OSPRDIOCRELEASE) {
 
