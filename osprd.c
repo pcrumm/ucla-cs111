@@ -112,6 +112,15 @@ static void for_each_open_file(struct task_struct *task,
  */
 static int release_file_lock(struct file *filp);
 
+/**
+ * Tries to acquire a lock for a file given that there are no locking
+ * conflicts with the disk.
+ *
+ * returns 0 on success
+ * returns -EBUSY if another lock is already in place
+ */
+static int try_acquire_file_lock(struct file *filp);
+
 /*
  * osprd_process_request(d, req)
  *   Called when the user reads or writes a sector.
@@ -222,6 +231,13 @@ static int release_file_lock(struct file *filp)
       else // file open for reading
         d->num_read_locks--;
 
+      // Set the head to the next ticket so that some process may respond
+      // Check for overflows, if the tail wraps around to 0, move the head to 0 as well.
+      if(d->ticket_head < d->ticket_tail)
+        d->ticket_head++;
+      else if(d->ticket_head > d->ticket_head)
+        d->ticket_head = 0;
+
       spin_unlock(&d->mutex);
 
       // Clear the file's locked bit
@@ -235,6 +251,36 @@ static int release_file_lock(struct file *filp)
   return -EINVAL;
 }
 
+static int try_acquire_file_lock(struct file *filp)
+{
+  osprd_info_t *d = file2osprd(filp);
+  int filp_writable = filp->f_mode & FMODE_WRITE;
+
+  // Check that this flag doesn't already have a lock
+  if(filp->f_flags & F_OSPRD_LOCKED)
+    return 0;
+
+  spin_lock(&d->mutex);
+
+  // We cannot grab the disk if there is any write lock
+  // or if the caller wishes to write and someone else is reading
+  if(d->num_write_locks > 0 || (filp_writable && d->num_read_locks > 0))
+  {
+    spin_unlock(&d->mutex);
+    return -EBUSY;
+  }
+
+  // Grab the lock!
+  if(filp_writable)
+    d->num_write_locks++;
+  else // readable
+    d->num_read_locks++;
+
+  spin_unlock(&d->mutex);
+  filp->f_flags |= F_OSPRD_LOCKED;
+  return 0;
+}
+
 /*
  * osprd_ioctl(inode, filp, cmd, arg)
  *   Called to perform an ioctl on the named file.
@@ -244,23 +290,6 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 {
 	osprd_info_t *d = file2osprd(filp);	// device info
 	int r = 0;			// return value: initially 0
-
-	// is file open for writing?
-	int filp_writable = (filp->f_mode & FMODE_WRITE) != 0;
-
-	// Determine if the device is currently locked
-	int filp_locked = filp->f_flags & F_OSPRD_LOCKED;
-
-	// Used to track the current request
-	unsigned local_ticket = d->ticket_head;
-	
-	spin_lock(&d->mutex);
-	if (d->ticket_head < d->ticket_tail)
-		d->ticket_head++;
-
-	if (d->ticket_head > d->ticket_tail)
-		d->ticket_head = 0;
-	spin_unlock(&d->mutex);
 
 	// Set 'r' to the ioctl's return value: 0 on success, negative on error
 
@@ -302,78 +331,28 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// be protected by a spinlock; which ones?)
 
 		// @todo deadlock checking
-		if (filp_writable)
-		{
-			spin_lock(&d->mutex);
 
-			// By above, we queue ourselves if there is a read or write lock
-			if (d->num_write_locks > 0 || d->num_read_locks > 0)
-			{
-				if (filp_locked)
-				{
-					d->ticket_tail++;
-					spin_unlock(&d->mutex);
+    // Used to track the current request
+    unsigned local_ticket;
 
-					// We can't do much more here, so let everything else try
-					wait_event_interruptible(d->blockq, (d->ticket_head == local_ticket && d->num_write_locks == 0 && d->num_read_locks == 0));
+    // If we can't acquire the lock we put ourselves in the back of the queue
+    // when the lock is released ticket_head will be incremented and we'll be
+    // woken up
+    while(try_acquire_file_lock(filp) != 0)
+    {
+      spin_lock(&d->mutex);
+      d->ticket_tail++;
+      local_ticket = d->ticket_tail;
+      spin_unlock(&d->mutex);
 
-					spin_lock(&d->mutex);
+      wait_event_interruptible(d->blockq, d->ticket_head == local_ticket);
 
-					// This means we got nailed by a signal while waiting. Return -ERESTARTSYS
-					if (signal_pending(current))
-					{
-						spin_unlock(&d->mutex);
-						return -ERESTARTSYS;
-					}
+      // See if we were woken up by a signal
+      if(signal_pending(current))
+        return -ERESTARTSYS;
+    }
 
-				}
-			}
-
-			// We now hold the lock
-			filp->f_flags |= F_OSPRD_LOCKED;
-			d->num_write_locks++;
-
-			d->ticket_head = 0; // maintain FIFO
-
-			spin_unlock(&d->mutex);
-
-			// The lock state is held: get out
-			return 0;
-		}
-
-		else // read lock
-		{
-			spin_lock(&d->mutex);
-
-			// Similarly, queue all reads if there is a write in progress.
-			if (d->num_write_locks > 0)
-			{
-				if (filp_locked)
-				{
-					d->ticket_tail++;
-
-					spin_unlock(&d->mutex);
-					wait_event_interruptible(d->blockq, d->ticket_head == local_ticket && d->num_write_locks == 0);
-
-					// We're running again
-
-					spin_lock(&d->mutex);
-					if (signal_pending(current))
-					{
-						spin_unlock(&d->mutex);
-						return -ERESTARTSYS;
-					}
-				}
-			}
-			
-			filp->f_flags |= F_OSPRD_LOCKED;
-			d->num_read_locks++;
-
-			d->ticket_head = 0;
-
-			spin_unlock(&d->mutex);
-			return 0;
-		}
+    r = 0;
 
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
 
@@ -384,48 +363,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// OSPRDIOCTRYACQUIRE should return -EBUSY.
 		// Otherwise, if we can grant the lock request, return 0.
 
-		if (filp_writable)
-		{
-			spin_lock(&d->mutex);
-
-			// We can only write if there are no read or write locks
-			if (d->num_read_locks != 0 || d->num_write_locks != 0)
-			{
-				spin_unlock(&d->mutex);
-				return -EBUSY;
-			}
-
-			// Otherwise, grab the lock!
-			else
-			{
-				d->num_write_locks++;
-				filp->f_flags |= F_OSPRD_LOCKED;
-				spin_unlock(&d->mutex);
-
-				return 0;
-			}
-		}
-
-		else
-		{
-			spin_lock(&d->mutex);
-
-			// For reads, we only block if there is a write
-			if (d->num_write_locks > 0)
-			{
-				spin_unlock(&d->mutex);
-				return -EBUSY;
-			}
-
-			else
-			{
-				d->num_read_locks++;
-				filp->f_flags |= F_OSPRD_LOCKED;
-				spin_unlock(&d->mutex);
-
-				return 0;
-			}
-		}
+    r = try_acquire_file_lock(filp);
 
 	} else if (cmd == OSPRDIOCRELEASE) {
 
@@ -436,7 +374,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// the wait queue, perform any additional accounting steps
 		// you need, and return 0.
 
-		return release_file_lock(filp);
+		r = release_file_lock(filp);
 
 	} else
 		r = -ENOTTY; /* unknown command */
