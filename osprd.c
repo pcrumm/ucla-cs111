@@ -64,6 +64,10 @@ typedef struct osprd_info {
 	/* HINT: You may want to add additional fields to help
 	         in detecting deadlock. */
 
+	// If a signal wakes a process in the queue, we re-queue everything for simplicity.
+	// If there is another unprocessed signal, everything would get re-queued again.
+	int num_to_requeue;
+
   unsigned num_read_locks;
   unsigned num_write_locks;
 
@@ -345,11 +349,36 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       local_ticket = d->ticket_tail;
       spin_unlock(&d->mutex);
 
-      wait_event_interruptible(d->blockq, d->ticket_head == local_ticket);
+      wait_event_interruptible(d->blockq, d->ticket_head == local_ticket || d->num_to_requeue > 0);
 
-      // See if we were woken up by a signal
-      if(signal_pending(current))
+      // First let's worry about requeuing everything, then process any
+      // other pending signals (and thus re-queue everything again)
+      if(d->num_to_requeue > 0)
+      {
+        // Note: do NOT wake threads here, each thread should requeue only ONCE
+        spin_lock(&d->mutex);
+        d->num_to_requeue--;
+        spin_unlock(&d->mutex);
+      }
+      else if(signal_pending(current)) // See if we were woken up by a signal
+      {
+        // For simplicity, we requeue all waiting tasks (-1 which
+        // is the process) being "popped" off the wait queue
+        spin_lock(&d->mutex);
+        d->num_to_requeue = (d->ticket_tail - d->ticket_head - 1);
+        d->ticket_head = 0;
+        d->ticket_tail = 0;
+
+        // All threads are woken to notify them of requeuing
+        // meanwhile, we wait until that finishes (no need to check
+        // for more interrupts, the process will exit anyway).
+        wake_up_all(&d->blockq);
+        spin_unlock(&d->mutex);
+
+        wait_event(d->blockq, d->num_to_requeue == 0);
+        wake_up_all(&d->blockq); // Wake everyone up again to check for other pending signals
         return -ERESTARTSYS;
+      }
     }
 
     r = 0;
@@ -394,6 +423,7 @@ static void osprd_setup(osprd_info_t *d)
 
   d->num_read_locks = 0;
   d->num_write_locks = 0;
+  d->num_to_requeue = 0;
 }
 
 
