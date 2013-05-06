@@ -65,7 +65,6 @@ typedef struct osprd_info {
 	         in detecting deadlock. */
 
 	// If a signal wakes a process in the queue, we re-queue everything for simplicity.
-	// If there is another unprocessed signal, everything would get re-queued again.
 	int num_to_requeue;
 
   unsigned num_read_locks;
@@ -351,14 +350,17 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
       wait_event_interruptible(d->blockq, d->ticket_head == local_ticket || d->num_to_requeue > 0);
 
-      // First let's worry about requeuing everything, then process any
-      // other pending signals (and thus re-queue everything again)
+      // process any pending signals by re-queueing everything
       if(d->num_to_requeue > 0)
       {
         // Note: do NOT wake threads here, each thread should requeue only ONCE
         spin_lock(&d->mutex);
         d->num_to_requeue--;
         spin_unlock(&d->mutex);
+
+        // If we find another pending signal, dispatch that too
+        if(signal_pending(current))
+          return -ERESTARTSYS;
       }
       else if(signal_pending(current)) // See if we were woken up by a signal
       {
