@@ -13,6 +13,7 @@
 #include <linux/blkdev.h>
 #include <linux/wait.h>
 #include <linux/file.h>
+#include <linux/slab.h> /* krealloc */
 
 #include "spinlock.h"
 #include "osprd.h"
@@ -43,6 +44,7 @@ MODULE_AUTHOR("Phil Crumm and Ivan Petkov");
 static int nsectors = 32;
 module_param(nsectors, int, 0);
 
+#define NOSPRD 4
 
 /* The internal representation of our device. */
 typedef struct osprd_info {
@@ -70,6 +72,10 @@ typedef struct osprd_info {
   unsigned num_read_locks;
   unsigned num_write_locks;
 
+  	// For each disk, we keep a list of processes waiting on it. We only care about adding processes
+  	// that hold a lock on another disk as those are the only ones that can deadlock.
+  	pid_t waiters[NOSPRD];
+
 	// The following elements are used internally; you don't need
 	// to understand them.
 	struct request_queue *queue;    // The device request queue.
@@ -78,7 +84,6 @@ typedef struct osprd_info {
 	struct gendisk *gd;             // The generic disk.
 } osprd_info_t;
 
-#define NOSPRD 4
 static osprd_info_t osprds[NOSPRD];
 
 
@@ -214,6 +219,44 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+static void queue_waiter(pid_t proc, osprd_info_t *d)
+{
+	int current_queue_size = sizeof(d->waiters) / sizeof(d->waiters[0]);
+	int i;
+
+	// Make sure the current process is not already queued here
+	for (i = 0; i < current_queue_size; i++)
+	{
+		if (d->waiters[i] == proc)
+			return;
+	}
+
+	d->waiters[current_queue_size] = proc;
+}
+
+static void remove_queued_waiter(pid_t proc, osprd_info_t *d)
+{
+	int current_queue_size = sizeof(d->waiters) / sizeof(d->waiters[0]);
+	int i, j;
+
+	if (current_queue_size == 0)
+		return;
+
+	for (i = 0; i < current_queue_size; i++)
+	{
+		if (d->waiters[i] == proc)
+		{
+			// If there's a match, shift everything else down
+			for (j = 0; (j + i) < (current_queue_size - 1); j++)
+			{
+				d->waiters[i + j] = d->waiters[j + 1];
+			}
+
+			return;
+		}
+	}
+}
+
 
 /*
  * osprd_lock
@@ -346,6 +389,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       spin_lock(&d->mutex);
       d->ticket_tail++;
       local_ticket = d->ticket_tail;
+
       spin_unlock(&d->mutex);
 
       wait_event_interruptible(d->blockq, d->ticket_head == local_ticket || d->num_to_requeue > 0);
@@ -383,6 +427,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       }
     }
 
+    // IF we successfully get the lock, remove ourselves from the queue
+    remove_queued_waiter(current->pid, d);
     r = 0;
 
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
