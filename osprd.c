@@ -168,11 +168,23 @@ static drive_wait_parents_t *waiters;
  	drive_lock_waiters_t *waiter = kmalloc(sizeof(drive_lock_waiters_t), GFP_KERNEL);
  	waiter->pid = p;
  	waiter->drive_id = d;
+ 	waiter->next = NULL;
 
  	for (next_lock_holder = holders; next_lock_holder != NULL; next_lock_holder = next_lock_holder->next)
  	{
  		current_holder = get_waiters_for_process(next_lock_holder->pid);
  		lock_parent = get_wait_parent_for_process(next_lock_holder->pid);
+
+		// @pcrumm: I'm not sure what the point of the waiter's global variable is
+		// so I'm taking a guess and instantiating this structure. Please fix if necessary.
+		if(lock_parent == NULL)
+		{
+			waiters = kmalloc(sizeof(drive_lock_waiters_t), GFP_KERNEL);
+			waiters->pid = p;
+			waiters->start = waiter;
+			waiters->next = NULL;
+			return;
+		}
 
  		if (current_holder == NULL)
  			lock_parent->start = waiter;
@@ -240,14 +252,6 @@ void remove_waiters(pid_t p, int d)
 }
 
  /**
- * For any device, get the head of the linked list that mantains its lock list.
- */
- static drive_lock_holders_t* get_lock_holders(int d)
- {
- 	return lock_holders[d];
- }
-
- /**
  * Checks if the current process has a lock on the specified device.
  *
  * Returns 1 if yes, 0 if no.
@@ -255,7 +259,7 @@ void remove_waiters(pid_t p, int d)
  static int has_lock_on_device(pid_t p, int d)
  {
  	drive_lock_holders_t *current_lock; // current is a reserved keyword
-	current_lock = get_lock_holders(d);
+	current_lock = lock_holders[d];
 
 	if (current_lock == NULL)
 		return 0;
@@ -295,11 +299,12 @@ void remove_waiters(pid_t p, int d)
  */
  static void add_lock (pid_t p, int d)
  {
- 	drive_lock_holders_t *device_locks = get_lock_holders(d);
+ 	drive_lock_holders_t *device_locks = lock_holders[d];
  	drive_lock_holders_t *new_lock, *current_lock;
 
  	new_lock = kmalloc(sizeof(drive_lock_holders_t), GFP_KERNEL);
  	new_lock->pid = p;
+ 	new_lock->next = NULL;
 
  	if (device_locks == NULL)
  		lock_holders[d] = new_lock;
@@ -326,8 +331,11 @@ void remove_waiters(pid_t p, int d)
   */
 static void remove_lock (pid_t p, int d)
 {
-	drive_lock_holders_t *device_locks = get_lock_holders(d);
+	drive_lock_holders_t *device_locks = lock_holders[d];
 	drive_lock_holders_t *temp, *current_lock, *last;
+
+	if(device_locks == NULL)
+		return;
 
 	// If the first item is the one we're removing, we need to update the head
 	if (device_locks->pid == p)
@@ -658,7 +666,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       if (has_lock(current->pid))
       {
       	int drive_id = drive_id_from_file(filp);
-      	add_waiter(get_lock_holders(drive_id), current->pid, drive_id);
+      	add_waiter(lock_holders[drive_id], current->pid, drive_id);
       }
 
       spin_unlock(&d->mutex);
@@ -904,6 +912,11 @@ static void osprd_exit(void);
 static int __init osprd_init(void)
 {
 	int i, r;
+
+	for(i = 0; i < NOSPRD; i++)
+		lock_holders[i] = NULL;
+
+	waiters = NULL;
 
 	// shut up the compiler
 	(void) for_each_open_file;
