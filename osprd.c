@@ -188,11 +188,13 @@ static drive_wait_parents_t *waiters;
  	{
  		current_lock = device_locks;
  		while ((current_lock = current_lock->next))
+ 		{
  			if (current_lock->next == NULL)
  			{
  				current_lock->next = new_lock;
  				return;
  			}
+ 		}
  	}
  }
 
