@@ -546,6 +546,7 @@ static int release_file_lock(struct file *filp)
 
       // Remove anything in the wait queue for this process
       remove_waiters(current->pid, drive_id_from_file(filp));
+      remove_lock(current->pid, drive_id_from_file(filp));
 
       spin_unlock(&d->mutex);
 
@@ -697,6 +698,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       }
     }
 
+    // We got the lock; indicate such
+    add_lock(current->pid, drive_id_from_file(filp));
     r = 0;
 
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
