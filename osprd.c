@@ -237,6 +237,17 @@ static void remove_lock (pid_t p, int d)
 	}
 }
 
+/* Offers a simple conversion from a disk info struct to a disk ID number */
+static int osprd2DriveID(osprd_info_t *d)
+{
+	int i;
+	for(i = 0; i < NOSPRD; i++)
+		if(d == osprds + i)
+			return i;
+
+	return -1;
+}
+
 
 // Declare useful helper functions
 
