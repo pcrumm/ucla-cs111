@@ -13,6 +13,7 @@
 #include <linux/blkdev.h>
 #include <linux/wait.h>
 #include <linux/file.h>
+#include <linux/slab.h> /* kalloc/kfree */
 
 #include "spinlock.h"
 #include "osprd.h"
@@ -78,8 +79,163 @@ typedef struct osprd_info {
 	struct gendisk *gd;             // The generic disk.
 } osprd_info_t;
 
+/* The basic primitive for our linked list of lock holders. */
+typedef struct drive_lock_holders drive_lock_holders_t;
+struct drive_lock_holders {
+	pid_t pid;					 // PID of the holding process
+	drive_lock_holders_t *next;	 // We need a list here--this points to the next item
+
+};
+
+/* The basic primitive for our linked list of lock waiters */
+typedef struct drive_lock_waiters drive_lock_waiters_t;
+struct drive_lock_waiters {
+	pid_t pid; 		// Process ID of the waiter
+	int drive_id; 	// The numerical ID (0-3) that's being waited on
+
+	drive_lock_waiters_t *next; // The next waiter for this drive
+};
+
+/* A list of processes currently blocking others */
+typedef struct drive_wait_parents drive_wait_parents_t;
+struct drive_wait_parents {
+	pid_t pid;
+
+	drive_lock_waiters_t *start; // The first currently waiting process
+	drive_wait_parents_t *next; // The next parent that's blocking
+};
+
 #define NOSPRD 4
 static osprd_info_t osprds[NOSPRD];
+
+static drive_lock_holders_t *lock_holders[NOSPRD];
+
+static drive_wait_parents_t *waiters;
+
+/**
+ * Helper functions for dealing with deadlock handling and detection
+ */
+
+ /**
+ * For any device, get the head of the linked list that mantains its lock list.
+ */
+ drive_lock_holders_t* get_lock_holders(int d)
+ {
+ 	return lock_holders[d];
+ }
+
+ /**
+ * Checks if the current process has a lock on the specified device.
+ *
+ * Returns 1 if yes, 0 if no.
+ */
+ int has_lock_on_device(pid_t p, int d)
+ {
+ 	drive_lock_holders_t *current_lock; // current is a reserved keyword
+	current_lock = get_lock_holders(d);
+
+	if (current_lock == NULL)
+		return 0;
+
+	if (current_lock->pid == p)
+		return 1;
+
+	while ((current_lock = current_lock->next) != NULL)
+	{
+		if (current_lock->pid == p)
+			return 1;
+	}
+
+	return 0;
+ }
+
+/**
+ * Checks if the current process has a lock on any device.
+ *
+ * Returns 1 if yes, 0 if no.
+ */
+ int has_lock(pid_t p)
+ {
+ 	int i;
+
+ 	for (i = 0; i < NOSPRD; i++)
+ 	{
+ 		if (has_lock_on_device(p, i))
+ 			return 1;
+ 	}
+
+ 	return 0;
+ }
+
+/**
+ * Add the specified process to the specified device's block list.
+ */
+ void add_lock (pid_t p, int d)
+ {
+ 	drive_lock_holders_t *device_locks = get_lock_holders(d);
+ 	drive_lock_holders_t *new_lock, *current_lock;
+
+ 	new_lock = kmalloc(sizeof(drive_lock_holders_t), GFP_KERNEL);
+ 	new_lock->pid = p;
+
+ 	if (device_locks == NULL)
+ 		lock_holders[d] = new_lock;
+
+ 	else if (device_locks->next == NULL)
+ 		device_locks->next = new_lock;
+
+ 	else
+ 	{
+ 		current_lock = device_locks;
+ 		while ((current_lock = current_lock->next))
+ 			if (current_lock->next == NULL)
+ 			{
+ 				current_lock->next = new_lock;
+ 				return;
+ 			}
+ 	}
+ }
+
+ /**
+  * Remove the current process ID From the specified device's lock list.
+  */
+void remove_lock (pid_t p, int d)
+{
+	drive_lock_holders_t *device_locks = get_lock_holders(d);
+	drive_lock_holders_t *temp, *current_lock, *last;
+
+	// If the first item is the one we're removing, we need to update the head
+	if (device_locks->pid == p)
+	{
+		temp = device_locks;
+
+		// Set the head of our list to the next item (which might be NULL)
+		lock_holders[d] = device_locks->next;
+
+		kfree(temp);
+
+		return;
+	}
+
+	current_lock = device_locks;
+	last = device_locks;
+
+	// Otherwise, keep going
+	while ((current_lock = current_lock->next) != NULL)
+	{
+		if (device_locks->pid == p)
+		{
+			temp = current_lock;
+			last->next = current_lock->next;
+
+			kfree(current_lock);
+
+			return;
+		}
+
+		last = current_lock;
+	}
+}
 
 
 // Declare useful helper functions
