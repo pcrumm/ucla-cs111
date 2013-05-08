@@ -167,22 +167,22 @@ close FOO;
       "aX"
     ],
 
-    #18 Deadlocks
+    #18 A simple deadlock
+    [
+      'echo ababab | ./osprdaccess -w -l /dev/osprda /dev/osprda ' .
+      './osprdaccess -r /dev/osprda',
+      ""
+    ],
+
+    #19 A more elaborate deadlock
     [
       '(set -m; ' .
-        #1 At 0s, grab read lock on drive A. Then, at 1s, get a write lock on B
-        '(./osprdaccess -r 5 -d 2 -l /dev/osprda && sleep 1 && (echo aaaaa | ./osprdaccess -w 5 -l /dev/osprdb)) & ' .
-
-        #2 At .5s, grab read lock on drive B. Then, at 1.2s, get a write lock on C
-        '(sleep 0.5 && ./osprdaccess -r 5 -d 2 -l /dev/osprdb && sleep 0.7 && (echo bbbbb | ./osprdaccess -w 5 -l /dev/osprdc)) & ' .
-
-        #3 At .7s, grab read lock on drive C. Then, at 1.5s, get a write lock on A
-        '(sleep 0.7 && ./osprdaccess -r 5 -d 2 -l /dev/osprdc && sleep 0.8 && (echo ccccc | ./osprdaccess -w 5 -l /dev/osprda)) ' .
-
-        # Clean up this separate shell
-        ') 2>/dev/null',
-        "" # no output, due to the deadlock
-    ],
+      '(echo test1 | ./osprdaccess -w -l -d 3 /dev/osprda /dev/osprdc) & ' .
+      '(echo test2 | ./osprdaccess -w -l -d 2 /dev/osprdb /dev/osprda) & ' .
+      '(echo test3 | ./osprdaccess -w -l -d 1 /dev/osprdc /dev/osprdb) & ' .
+      ') 2>/dev/null',
+      ""
+    ]
     );
 
 my($ntest) = 0;

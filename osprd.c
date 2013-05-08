@@ -242,7 +242,7 @@ void remove_waiters(pid_t p, int d)
  /**
  * For any device, get the head of the linked list that mantains its lock list.
  */
- drive_lock_holders_t* get_lock_holders(int d)
+ static drive_lock_holders_t* get_lock_holders(int d)
  {
  	return lock_holders[d];
  }
@@ -252,7 +252,7 @@ void remove_waiters(pid_t p, int d)
  *
  * Returns 1 if yes, 0 if no.
  */
- int has_lock_on_device(pid_t p, int d)
+ static int has_lock_on_device(pid_t p, int d)
  {
  	drive_lock_holders_t *current_lock; // current is a reserved keyword
 	current_lock = get_lock_holders(d);
@@ -277,7 +277,7 @@ void remove_waiters(pid_t p, int d)
  *
  * Returns 1 if yes, 0 if no.
  */
- int has_lock(pid_t p)
+ static int has_lock(pid_t p)
  {
  	int i;
 
@@ -293,7 +293,7 @@ void remove_waiters(pid_t p, int d)
 /**
  * Add the specified process to the specified device's block list.
  */
- void add_lock (pid_t p, int d)
+ static void add_lock (pid_t p, int d)
  {
  	drive_lock_holders_t *device_locks = get_lock_holders(d);
  	drive_lock_holders_t *new_lock, *current_lock;
@@ -324,7 +324,7 @@ void remove_waiters(pid_t p, int d)
  /**
   * Remove the current process ID From the specified device's lock list.
   */
-void remove_lock (pid_t p, int d)
+static void remove_lock (pid_t p, int d)
 {
 	drive_lock_holders_t *device_locks = get_lock_holders(d);
 	drive_lock_holders_t *temp, *current_lock, *last;
@@ -360,6 +360,17 @@ void remove_lock (pid_t p, int d)
 
 		last = current_lock;
 	}
+}
+
+/* Offers a simple conversion from a disk info struct to a disk ID number */
+static int osprd2DriveID(osprd_info_t *d)
+{
+	int i;
+	for(i = 0; i < NOSPRD; i++)
+		if(d == osprds + i)
+			return i;
+
+	return -1;
 }
 
 
