@@ -373,6 +373,28 @@ void remove_lock (pid_t p, int d)
  */
 static osprd_info_t *file2osprd(struct file *filp);
 
+/**
+ * Given a file struct, returns the drive ID of the "file"
+ */
+int drive_id_from_file (struct file *filp)
+{
+	osprd_info_t *osprd_data = file2osprd(filp);
+	int i;
+
+	for (i = 0; i < NOSPRD; i++)
+	{
+		if (&osprds[i] == osprd_data)
+		{
+			return i;
+		}
+	}
+
+	// If we get here, we have a serious problem
+	eprintk("Unrecognized device");
+	return -1;
+
+}
+
 /*
  * for_each_open_file(task, callback, user_data)
  *   Given a task, call the function 'callback' once for each of 'task's open
@@ -522,6 +544,9 @@ static int release_file_lock(struct file *filp)
       else if(d->ticket_head > d->ticket_head)
         d->ticket_head = 0;
 
+      // Remove anything in the wait queue for this process
+      remove_waiters(current->pid, drive_id_from_file(filp));
+
       spin_unlock(&d->mutex);
 
       // Clear the file's locked bit
@@ -627,6 +652,14 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       spin_lock(&d->mutex);
       d->ticket_tail++;
       local_ticket = d->ticket_tail;
+
+      // If the current process already holds a lock, we need to add it to the deadlock queue
+      if (has_lock(current->pid))
+      {
+      	int drive_id = drive_id_from_file(filp);
+      	add_waiter(get_lock_holders(drive_id), current->pid, drive_id);
+      }
+
       spin_unlock(&d->mutex);
 
       wait_event_interruptible(d->blockq, d->ticket_head == local_ticket || d->num_to_requeue > 0);
