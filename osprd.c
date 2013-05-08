@@ -116,6 +116,129 @@ static drive_wait_parents_t *waiters;
  * Helper functions for dealing with deadlock handling and detection
  */
 
+/**
+ * Grabs the *waiters member for the specified process
+ *
+ * Returns NULL if not defined.
+ */
+ drive_wait_parents_t* get_wait_parent_for_process(pid_t p)
+ {
+ 	drive_wait_parents_t *current_parent = waiters;
+
+ 	if (waiters == NULL)
+ 		return NULL;
+
+ 	if (waiters->pid == p)
+ 		return waiters;
+
+ 	while ((current_parent = current_parent->next) != NULL)
+ 	{
+ 		if (current_parent->pid == p)
+ 			return current_parent;
+ 	}
+
+ 	return NULL;
+ }
+
+/**
+ * For the given process ID, gets the start of its waiters list
+ *
+ * Returns null if not specified.
+ */
+ drive_lock_waiters_t* get_waiters_for_process(pid_t p)
+ {
+ 	drive_wait_parents_t *current_parent = get_wait_parent_for_process(p);
+
+ 	if (current_parent == NULL)
+ 		return NULL;
+
+ 	return current_parent->start;
+ }
+
+/**
+ * For each of the holders, add the process p (and disk d) to that holder's
+ * drive_wait_parents_t list.
+ */
+ void add_waiter(drive_lock_holders_t *holders, pid_t p, int d)
+ {
+ 	drive_lock_holders_t *next_lock_holder; // For when we iterate over the lock holders for the process
+ 	drive_lock_waiters_t *current_holder; // The current wait holder we are processing
+ 	drive_wait_parents_t *lock_parent; // The current lock parent (the lock parent matching the PIDs in holders)
+
+ 	drive_lock_waiters_t *waiter = kmalloc(sizeof(drive_lock_waiters_t), GFP_KERNEL);
+ 	waiter->pid = p;
+ 	waiter->drive_id = d;
+
+ 	for (next_lock_holder = holders; next_lock_holder != NULL; next_lock_holder = next_lock_holder->next)
+ 	{
+ 		current_holder = get_waiters_for_process(next_lock_holder->pid);
+ 		lock_parent = get_wait_parent_for_process(next_lock_holder->pid);
+
+ 		if (current_holder == NULL)
+ 			lock_parent->start = waiter;
+
+ 		else if (lock_parent->start->next == NULL)
+	 		lock_parent->start->next = waiter;
+
+	 	else
+	 	{
+	 		drive_lock_waiters_t *next = lock_parent->start;
+
+	 		while ((next = next->next))
+	 		{
+	 			// If we're already in the list, get out
+	 			if (next->pid == p)
+	 				break;
+
+	 			// Otherwise, add it on
+	 			if (next->next == NULL)
+	 			{
+	 				next->next = waiter;
+	 				break;
+	 			}
+	 		}
+	 	}
+ 	}
+ }
+
+/*
+ * Remove every process waiting on p / drive d
+ */
+void remove_waiters(pid_t p, int d)
+{
+	drive_wait_parents_t *process_wait_parent = get_wait_parent_for_process(p);
+	drive_lock_waiters_t *last_waiter, *current_waiter, *process_waiters;
+
+	if (process_wait_parent == NULL)
+		return;
+
+	 process_waiters = get_waiters_for_process(p);
+
+	if (process_waiters == NULL)
+		return;
+
+	else if (process_waiters->drive_id == d)
+	{
+		process_wait_parent->start = process_waiters->next;
+	}
+
+	else
+	{
+		last_waiter = process_waiters;
+		current_waiter = process_waiters;
+
+		while ((current_waiter = current_waiter->next) != NULL)
+		{
+			if (current_waiter->drive_id == d)
+			{
+				last_waiter->next = current_waiter->next;
+			}
+
+			last_waiter = current_waiter;
+		}
+	}
+}
+
  /**
  * For any device, get the head of the linked list that mantains its lock list.
  */
