@@ -13,7 +13,6 @@
 #include <linux/blkdev.h>
 #include <linux/wait.h>
 #include <linux/file.h>
-#include <linux/slab.h> /* kalloc/kfree */
 
 #include "spinlock.h"
 #include "osprd.h"
@@ -79,297 +78,12 @@ typedef struct osprd_info {
 	struct gendisk *gd;             // The generic disk.
 } osprd_info_t;
 
-/* The basic primitive for our linked list of lock holders. */
-typedef struct drive_lock_holders drive_lock_holders_t;
-struct drive_lock_holders {
-	pid_t pid;					 // PID of the holding process
-	drive_lock_holders_t *next;	 // We need a list here--this points to the next item
-
-};
-
-/* The basic primitive for our linked list of lock waiters */
-typedef struct drive_lock_waiters drive_lock_waiters_t;
-struct drive_lock_waiters {
-	pid_t pid; 		// Process ID of the waiter
-	int drive_id; 	// The numerical ID (0-3) that's being waited on
-
-	drive_lock_waiters_t *next; // The next waiter for this drive
-};
-
-/* A list of processes currently blocking others */
-typedef struct drive_wait_parents drive_wait_parents_t;
-struct drive_wait_parents {
-	pid_t pid;
-
-	drive_lock_waiters_t *start; // The first currently waiting process
-	drive_wait_parents_t *next; // The next parent that's blocking
-};
-
 #define NOSPRD 4
 static osprd_info_t osprds[NOSPRD];
-
-static drive_lock_holders_t *lock_holders[NOSPRD];
-
-static drive_wait_parents_t *waiters;
 
 /**
  * Helper functions for dealing with deadlock handling and detection
  */
-
-/**
- * Grabs the *waiters member for the specified process
- *
- * Returns NULL if not defined.
- */
- drive_wait_parents_t* get_wait_parent_for_process(pid_t p)
- {
- 	drive_wait_parents_t *current_parent = waiters;
-
- 	if (waiters == NULL)
- 		return NULL;
-
- 	if (waiters->pid == p)
- 		return waiters;
-
- 	while ((current_parent = current_parent->next) != NULL)
- 	{
- 		if (current_parent->pid == p)
- 			return current_parent;
- 	}
-
- 	return NULL;
- }
-
-/**
- * For the given process ID, gets the start of its waiters list
- *
- * Returns null if not specified.
- */
- drive_lock_waiters_t* get_waiters_for_process(pid_t p)
- {
- 	drive_wait_parents_t *current_parent = get_wait_parent_for_process(p);
-
- 	if (current_parent == NULL)
- 		return NULL;
-
- 	return current_parent->start;
- }
-
-/**
- * For each of the holders, add the process p (and disk d) to that holder's
- * drive_wait_parents_t list.
- */
- void add_waiter(drive_lock_holders_t *holders, pid_t p, int d)
- {
- 	drive_lock_holders_t *next_lock_holder; // For when we iterate over the lock holders for the process
- 	drive_lock_waiters_t *current_holder; // The current wait holder we are processing
- 	drive_wait_parents_t *lock_parent; // The current lock parent (the lock parent matching the PIDs in holders)
-
- 	drive_lock_waiters_t *waiter = kmalloc(sizeof(drive_lock_waiters_t), GFP_KERNEL);
- 	waiter->pid = p;
- 	waiter->drive_id = d;
- 	waiter->next = NULL;
-
- 	for (next_lock_holder = holders; next_lock_holder != NULL; next_lock_holder = next_lock_holder->next)
- 	{
- 		current_holder = get_waiters_for_process(next_lock_holder->pid);
- 		lock_parent = get_wait_parent_for_process(next_lock_holder->pid);
-
-		// @pcrumm: I'm not sure what the point of the waiter's global variable is
-		// so I'm taking a guess and instantiating this structure. Please fix if necessary.
-		if(lock_parent == NULL)
-		{
-			waiters = kmalloc(sizeof(drive_lock_waiters_t), GFP_KERNEL);
-			waiters->pid = p;
-			waiters->start = waiter;
-			waiters->next = NULL;
-			return;
-		}
-
- 		if (current_holder == NULL)
- 			lock_parent->start = waiter;
-
- 		else if (lock_parent->start->next == NULL)
-	 		lock_parent->start->next = waiter;
-
-	 	else
-	 	{
-	 		drive_lock_waiters_t *next = lock_parent->start;
-
-	 		while ((next = next->next))
-	 		{
-	 			// If we're already in the list, get out
-	 			if (next->pid == p)
-	 				break;
-
-	 			// Otherwise, add it on
-	 			if (next->next == NULL)
-	 			{
-	 				next->next = waiter;
-	 				break;
-	 			}
-	 		}
-	 	}
- 	}
- }
-
-/*
- * Remove every process waiting on p / drive d
- */
-void remove_waiters(pid_t p, int d)
-{
-	drive_wait_parents_t *process_wait_parent = get_wait_parent_for_process(p);
-	drive_lock_waiters_t *last_waiter, *current_waiter, *process_waiters;
-
-	if (process_wait_parent == NULL)
-		return;
-
-	 process_waiters = get_waiters_for_process(p);
-
-	if (process_waiters == NULL)
-		return;
-
-	else if (process_waiters->drive_id == d)
-	{
-		process_wait_parent->start = process_waiters->next;
-	}
-
-	else
-	{
-		last_waiter = process_waiters;
-		current_waiter = process_waiters;
-
-		while ((current_waiter = current_waiter->next) != NULL)
-		{
-			if (current_waiter->drive_id == d)
-			{
-				last_waiter->next = current_waiter->next;
-			}
-
-			last_waiter = current_waiter;
-		}
-	}
-}
-
- /**
- * Checks if the current process has a lock on the specified device.
- *
- * Returns 1 if yes, 0 if no.
- */
- static int has_lock_on_device(pid_t p, int d)
- {
- 	drive_lock_holders_t *current_lock; // current is a reserved keyword
-	current_lock = lock_holders[d];
-
-	if (current_lock == NULL)
-		return 0;
-
-	if (current_lock->pid == p)
-		return 1;
-
-	while ((current_lock = current_lock->next) != NULL)
-	{
-		if (current_lock->pid == p)
-			return 1;
-	}
-
-	return 0;
- }
-
-/**
- * Checks if the current process has a lock on any device.
- *
- * Returns 1 if yes, 0 if no.
- */
- static int has_lock(pid_t p)
- {
- 	int i;
-
- 	for (i = 0; i < NOSPRD; i++)
- 	{
- 		if (has_lock_on_device(p, i))
- 			return 1;
- 	}
-
- 	return 0;
- }
-
-/**
- * Add the specified process to the specified device's block list.
- */
- static void add_lock (pid_t p, int d)
- {
- 	drive_lock_holders_t *device_locks = lock_holders[d];
- 	drive_lock_holders_t *new_lock, *current_lock;
-
- 	new_lock = kmalloc(sizeof(drive_lock_holders_t), GFP_KERNEL);
- 	new_lock->pid = p;
- 	new_lock->next = NULL;
-
- 	if (device_locks == NULL)
- 		lock_holders[d] = new_lock;
-
- 	else if (device_locks->next == NULL)
- 		device_locks->next = new_lock;
-
- 	else
- 	{
- 		current_lock = device_locks;
- 		while ((current_lock = current_lock->next))
- 		{
- 			if (current_lock->next == NULL)
- 			{
- 				current_lock->next = new_lock;
- 				return;
- 			}
- 		}
- 	}
- }
-
- /**
-  * Remove the current process ID From the specified device's lock list.
-  */
-static void remove_lock (pid_t p, int d)
-{
-	drive_lock_holders_t *device_locks = lock_holders[d];
-	drive_lock_holders_t *temp, *current_lock, *last;
-
-	if(device_locks == NULL)
-		return;
-
-	// If the first item is the one we're removing, we need to update the head
-	if (device_locks->pid == p)
-	{
-		temp = device_locks;
-
-		// Set the head of our list to the next item (which might be NULL)
-		lock_holders[d] = device_locks->next;
-
-		kfree(temp);
-
-		return;
-	}
-
-	current_lock = device_locks;
-	last = device_locks;
-
-	// Otherwise, keep going
-	while ((current_lock = current_lock->next) != NULL)
-	{
-		if (device_locks->pid == p)
-		{
-			temp = current_lock;
-			last->next = current_lock->next;
-
-			kfree(current_lock);
-
-			return;
-		}
-
-		last = current_lock;
-	}
-}
-
 
 // Declare useful helper functions
 
@@ -552,10 +266,6 @@ static int release_file_lock(struct file *filp)
       else if(d->ticket_head > d->ticket_tail)
         d->ticket_head = 0;
 
-      // Remove anything in the wait queue for this process
-      remove_waiters(current->pid, drive_id_from_file(filp));
-      remove_lock(current->pid, drive_id_from_file(filp));
-
       spin_unlock(&d->mutex);
 
       // Clear the file's locked bit
@@ -662,13 +372,6 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       d->ticket_tail++;
       local_ticket = d->ticket_tail;
 
-      // If the current process already holds a lock, we need to add it to the deadlock queue
-      if (has_lock(current->pid))
-      {
-      	int drive_id = drive_id_from_file(filp);
-      	add_waiter(lock_holders[drive_id], current->pid, drive_id);
-      }
-
       spin_unlock(&d->mutex);
 
       wait_event_interruptible(d->blockq, d->ticket_head == local_ticket || d->num_to_requeue > 0);
@@ -706,8 +409,6 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       }
     }
 
-    // We got the lock; indicate such
-    add_lock(current->pid, drive_id_from_file(filp));
     r = 0;
 
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
@@ -912,11 +613,6 @@ static void osprd_exit(void);
 static int __init osprd_init(void)
 {
 	int i, r;
-
-	for(i = 0; i < NOSPRD; i++)
-		lock_holders[i] = NULL;
-
-	waiters = NULL;
 
 	// shut up the compiler
 	(void) for_each_open_file;
