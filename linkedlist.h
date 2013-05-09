@@ -60,29 +60,30 @@ list_node_t* list_add_to_front (list_node_t *head, pid_t p)
  */
 list_node_t* list_remove_element (list_node_t *head, pid_t p)
 {
-	list_node_t *remove_elem, *current_node;
+	list_node_t *current_node, *last_node;
 
 	if(head == NULL)
 		return NULL;
 
 	if(head->pid == p)
 	{
-		remove_elem = head;
+		current_node = head;
 		head = head->next;
-		kfree(remove_elem);
+		kfree(current_node);
 		return head;
 	}
 
-	current_node = head;
+	current_node = last_node = head;
 	while((current_node = current_node->next) != NULL)
 	{
 		if(current_node->pid == p)
 		{
-			remove_elem = current_node;
-			current_node = current_node->next;
-			kfree(remove_elem);
+			last_node->next = current_node->next;
+			kfree(current_node);
 			return head;
 		}
+
+		last_node = current_node;
 	}
 
 	// Element not found

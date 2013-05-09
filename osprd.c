@@ -463,13 +463,16 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
       wait_event_interruptible(d->blockq, d->ticket_head == local_ticket || d->num_to_requeue > 0);
 
+      spin_lock(&d->mutex);
+      d->lock_waiter_l = list_remove_element(d->lock_waiter_l, current->pid);
+      spin_unlock(&d->mutex);
+
       // process any pending signals by re-queueing everything
       if(d->num_to_requeue > 0)
       {
         // Note: do NOT wake threads here, each thread should requeue only ONCE
         spin_lock(&d->mutex);
         d->num_to_requeue--;
-        d->lock_waiter_l = list_remove_element(d->lock_waiter_l, current->pid);
         spin_unlock(&d->mutex);
 
         // If we find another pending signal, dispatch that too
@@ -484,7 +487,6 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
         d->num_to_requeue = (d->ticket_tail - d->ticket_head - 1);
         d->ticket_head = 0;
         d->ticket_tail = 0;
-        d->lock_waiter_l = list_remove_element(d->lock_waiter_l, current->pid);
 
         // All threads are woken to notify them of requeuing
         // meanwhile, we wait until that finishes (no need to check
