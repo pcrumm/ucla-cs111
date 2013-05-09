@@ -549,7 +549,7 @@ static int release_file_lock(struct file *filp)
       // Check for overflows, if the tail wraps around to 0, move the head to 0 as well.
       if(d->ticket_head < d->ticket_tail)
         d->ticket_head++;
-      else if(d->ticket_head > d->ticket_head)
+      else if(d->ticket_head > d->ticket_tail)
         d->ticket_head = 0;
 
       // Remove anything in the wait queue for this process
