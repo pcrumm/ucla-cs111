@@ -370,7 +370,7 @@ static bool check_deadlock (osprd_info_t *d)
 			}
 
 			spin_lock(&d->mutex);
-			pid_queue_add_elements_from_list(q, d->lock_holder_l);
+			pid_queue_add_elements_from_list(q, osprds[d_id].lock_holder_l);
 			spin_unlock(&d->mutex);
 		}
 
@@ -494,8 +494,12 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
         wake_up_all(&d->blockq);
         spin_unlock(&d->mutex);
 
-        wait_event(d->blockq, d->num_to_requeue == 0);
-        wake_up_all(&d->blockq); // Wake everyone up again to check for other pending signals
+        // Sanity check
+        if(d->num_to_requeue > 0)
+        {
+          wait_event(d->blockq, d->num_to_requeue == 0);
+          wake_up_all(&d->blockq); // Wake everyone up again to check for other pending signals
+        }
         return -ERESTARTSYS;
       }
     }

@@ -183,12 +183,10 @@ close FOO;
 
     #20 A more elaborate deadlock
     [
-      '(set -m; ' .
-      '(echo test1 | ./osprdaccess -w -l -d 3 /dev/osprda /dev/osprdc) & ' .
-      '(echo test2 | ./osprdaccess -w -l -d 2 /dev/osprdb /dev/osprda) & ' .
-      '(echo test3 | ./osprdaccess -w -l -d 1 /dev/osprdc /dev/osprdb) & ' .
-      ') 2>/dev/null',
-      "ioctl OSPRDIOCACQUIRE: deadlock avoided"
+      '(echo test1 | ./osprdaccess -w -l -d 0.1 /dev/osprda /dev/osprdb ) & ' .
+      '(echo test2 | ./osprdaccess -w -l -d 0.1 /dev/osprdb /dev/osprdc ) & ' .
+      '(echo test3 | ./osprdaccess -w -l -d 0.1 /dev/osprdc /dev/osprda ) & ' ,
+      "ioctl OSPRDIOCACQUIRE: Resource deadlock avoided"
     ]
     );
 
