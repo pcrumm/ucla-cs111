@@ -552,7 +552,19 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 static uint32_t
 allocate_block(void)
 {
-	/* EXERCISE: Your code here */
+	void *freemap = ospfs_block(OSPFS_FREEMAP_BLK);
+	uint32_t i;
+
+	// The freemap and inode blocks should all be marked as allocated
+	// thus it should be safe to iterate over them
+	for(i = OSPFS_FREEMAP_BLK; i < ospfs_super->os_nblocks; i++)
+	{
+		if(bitvector_test(freemap, i))
+		{
+			bitvector_clear(freemap, i);
+			return i;
+		}
+	}
 	return 0;
 }
 
@@ -571,7 +583,16 @@ allocate_block(void)
 static void
 free_block(uint32_t blockno)
 {
-	/* EXERCISE: Your code here */
+	// We can free any block after the last inode block
+	uint32_t last_inode_block = ospfs_super->os_firstinob + OSPFS_BLKINODES;
+	void *freemap = ospfs_block(OSPFS_FREEMAP_BLK);
+
+	// Check for invalid block numbers
+	if(blockno >= ospfs_super->os_ninodes || blockno <= last_inode_block)
+		return;
+
+	// Free the block
+	bitvector_set(freemap, blockno);
 }
 
 
