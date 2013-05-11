@@ -11,14 +11,14 @@
 # information you'd like us to know, please add it at the end of the file.
 
 # Partner 1
-Name: 
-Student ID: 
-Email: 
+Name: Phil Crumm
+Student ID: 804005575
+Email: pcrumm@ucla.edu
 
 # Partner 2 (if you're working in a team)
-Name: 
-Student ID: 
-Email: 
+Name: Ivan Petkov
+Student ID: 704036431
+Email: ipetkov@ucla.edu
 
 # Extra credit problems
 #Extra credit problem: none
