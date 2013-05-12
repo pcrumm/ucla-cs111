@@ -552,7 +552,19 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 static uint32_t
 allocate_block(void)
 {
-	/* EXERCISE: Your code here */
+	void *freemap = ospfs_block(OSPFS_FREEMAP_BLK);
+	uint32_t i;
+
+	// The freemap and inode blocks should all be marked as allocated
+	// thus it should be safe to iterate over them
+	for(i = OSPFS_FREEMAP_BLK; i < ospfs_super->os_nblocks; i++)
+	{
+		if(bitvector_test(freemap, i))
+		{
+			bitvector_clear(freemap, i);
+			return i;
+		}
+	}
 	return 0;
 }
 
@@ -571,7 +583,16 @@ allocate_block(void)
 static void
 free_block(uint32_t blockno)
 {
-	/* EXERCISE: Your code here */
+	// We can free any block after the last inode block
+	uint32_t last_inode_block = ospfs_super->os_firstinob + OSPFS_BLKINODES;
+	void *freemap = ospfs_block(OSPFS_FREEMAP_BLK);
+
+	// Check for invalid block numbers
+	if(blockno >= ospfs_super->os_ninodes || blockno <= last_inode_block)
+		return;
+
+	// Free the block
+	bitvector_set(freemap, blockno);
 }
 
 
@@ -607,8 +628,10 @@ free_block(uint32_t blockno)
 static int32_t
 indir2_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	if(b < OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		return -1;
+
+	return 0;
 }
 
 
@@ -626,8 +649,18 @@ indir2_index(uint32_t b)
 static int32_t
 indir_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	// Check if the block is contained directly in the inode
+	if(b < OSPFS_NDIRECT)
+		return -1;
+
+	// If indir2_index reports -1 we don't need the doubly indirect block
+	// and the file block is contained in the indirect block
+	if(indir2_index(b) == -1)
+		return 0;
+
+	// Otherwise we have to utilize the doubly indirect block
+	b -= OSPFS_NDIRECT + OSPFS_NINDIRECT;
+	return b / OSPFS_NINDIRECT;
 }
 
 
@@ -846,11 +879,22 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 	// Change 'count' so we never read past the end of the file.
 	/* EXERCISE: Your code here */
 
+	// Check that both the requested offset and the count are within bounds
+	// Otherwise unsigned subtraction will correctly give us the offset, but
+	// we won't detect overflows
+	if(*f_pos > oi->oi_size)
+		count = 0;
+	else if(*f_pos + count > oi->oi_size)
+		count = oi->oi_size - *f_pos;
+
 	// Copy the data to user block by block
 	while (amount < count && retval >= 0) {
 		uint32_t blockno = ospfs_inode_blockno(oi, *f_pos);
 		uint32_t n;
 		char *data;
+
+		uint32_t data_offset; // Data offset from the start of the block
+		uint32_t bytes_left_to_copy = count - amount;
 
 		// ospfs_inode_blockno returns 0 on error
 		if (blockno == 0) {
@@ -865,8 +909,18 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 		// into user space.
 		// Use variable 'n' to track number of bytes moved.
 		/* EXERCISE: Your code here */
-		retval = -EIO; // Replace these lines
-		goto done;
+
+		data_offset = *f_pos % OSPFS_BLKSIZE;
+
+		n = OSPFS_BLKSIZE - data_offset;
+
+		// Copy bytes either until we hit the end
+		// of the block or satisfy the user
+		if(n > bytes_left_to_copy)
+			n = bytes_left_to_copy;
+
+		if(copy_to_user(buffer, data + data_offset, n) > 0)
+			return -EFAULT;
 
 		buffer += n;
 		amount += n;
@@ -1228,6 +1282,6 @@ module_init(init_ospfs_fs)
 module_exit(exit_ospfs_fs)
 
 // Information about the module
-MODULE_AUTHOR("Skeletor");
+MODULE_AUTHOR("Phil Crumm and Ivan Petkov");
 MODULE_DESCRIPTION("OSPFS");
 MODULE_LICENSE("GPL");
