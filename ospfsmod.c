@@ -328,7 +328,7 @@ ospfs_delete_dentry(struct dentry *dentry)
 /*****************************************************************************
  * DIRECTORY OPERATIONS
  *
- * EXERCISE: Finish 'ospfs_dir_readdir' and 'ospfs_symlink'.
+ * COMPLETED EXERCISE: Finish 'ospfs_dir_readdir' and 'ospfs_symlink'.
  */
 
 // ospfs_dir_lookup(dir, dentry, ignore)
@@ -418,7 +418,7 @@ ospfs_dir_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *ign
 //   Returns: 1 at end of directory, 0 if filldir returns < 0 before the end
 //     of the directory, and -(error number) on error.
 //
-//   EXERCISE: Finish implementing this function.
+//   COMPLETED EXERCISE: Finish implementing this function.
 
 static int
 ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
@@ -428,6 +428,9 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	uint32_t f_pos = filp->f_pos;
 	int r = 0;		/* Error return value, if any */
 	int ok_so_far = 0;	/* Return value from 'filldir' */
+
+	uint32_t curr_file_byte_offset = 0; /* The offset in the inode */
+	int file_type; /* Looked-up value for each directory entry's filetype */
 
 	// f_pos is an offset into the directory's data, plus two.
 	// The "plus two" is to account for "." and "..".
@@ -449,11 +452,21 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		ospfs_inode_t *entry_oi;
 
 		/* If at the end of the directory, set 'r' to 1 and exit
-		 * the loop.  For now we do this all the time.
+		 * the loop.
 		 *
-		 * EXERCISE: Your code here */
-		r = 1;		/* Fix me! */
-		break;		/* Fix me! */
+		 * We do this through a bit of extrapolation. We can determine
+		 * the effective directory length based on the directory's
+		 * "file size": it is a multiple of this size and the size
+		 * of each directory entry. If this exceeds our offset position
+		 * (offset by 2 to account for . and ..), we're out of directory
+		 * to read. */
+
+		 curr_file_byte_offset = (f_pos - 2) * OSPFS_DIRENTRY_SIZE;
+		if (curr_file_byte_offset >= dir_oi->oi_size)
+		{
+			r = 1;
+			break;
+		}
 
 		/* Get a pointer to the next entry (od) in the directory.
 		 * The file system interprets the contents of a
@@ -475,7 +488,43 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 * advance to the next directory entry.
 		 */
 
-		/* EXERCISE: Your code here */
+		// Get the appropriate directory entry for our position
+		 od = ospfs_inode_data(dir_oi, curr_file_byte_offset);
+
+		 // Look up the appropriate inode.
+		 entry_oi = ospfs_inode(od->od_ino);
+
+		 if (entry_oi == NULL) // We can get an empty result. If so, move on
+		 {
+		 	f_pos++;
+		 	continue;
+		 }
+
+		 // Lookup the filetype of the file for filldir
+		 switch (entry_oi->oi_ftype)
+		 {
+		 	case OSPFS_FTYPE_REG: 		// File
+		 		file_type = DT_REG;
+		 		break;
+
+		 	case OSPFS_FTYPE_DIR: 		// Directory
+		 		file_type = DT_DIR;
+		 		break;
+
+		 	case OSPFS_FTYPE_SYMLINK:	// Symlink
+		 		file_type = DT_LNK;
+		 		break;
+
+		 	default:					// This is a problem: bail out
+		 		r = 1;
+		 		continue;
+		 		break; // We'll never reach this, but it silences a warning
+		 }
+
+		 // We now have all of the information the callback needs, so run it
+		 ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, od->od_ino, file_type); 
+
+		 f_pos++;
 	}
 
 	// Save the file position and return!
@@ -494,7 +543,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 //
 //   Returns: 0 if success and -ENOENT on entry not found.
 //
-//   EXERCISE: Make sure that deleting symbolic links works correctly.
+//   COMPLETED EXERCISE: Make sure that deleting symbolic links works correctly.
 
 static int
 ospfs_unlink(struct inode *dirino, struct dentry *dentry)
@@ -521,6 +570,11 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 
 	od->od_ino = 0;
 	oi->oi_nlink--;
+
+	// Handle symbolic link deletion: actually remove the file if it's gone
+	if (oi->oi_nlink == 0 && oi->oi_ftype != OSPFS_FTYPE_SYMLINK)
+		change_size(oi, 0);
+
 	return 0;
 }
 
