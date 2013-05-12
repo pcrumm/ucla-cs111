@@ -628,8 +628,10 @@ free_block(uint32_t blockno)
 static int32_t
 indir2_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	if(b < OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		return -1;
+
+	return 0;
 }
 
 
@@ -647,8 +649,18 @@ indir2_index(uint32_t b)
 static int32_t
 indir_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	// Check if the block is contained directly in the inode
+	if(b < OSPFS_NDIRECT)
+		return -1;
+
+	// If indir2_index reports -1 we don't need the doubly indirect block
+	// and the file block is contained in the indirect block
+	if(indir2_index(b) == -1)
+		return 0;
+
+	// Otherwise we have to utilize the doubly indirect block
+	b -= OSPFS_NDIRECT + OSPFS_NINDIRECT;
+	return b / OSPFS_NINDIRECT;
 }
 
 
@@ -1249,6 +1261,6 @@ module_init(init_ospfs_fs)
 module_exit(exit_ospfs_fs)
 
 // Information about the module
-MODULE_AUTHOR("Skeletor");
+MODULE_AUTHOR("Phil Crumm and Ivan Petkov");
 MODULE_DESCRIPTION("OSPFS");
 MODULE_LICENSE("GPL");
