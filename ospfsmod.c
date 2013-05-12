@@ -494,7 +494,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 // Look up the appropriate inode.
 		 entry_oi = ospfs_inode(od->od_ino);
 
-		 if (entry_oi == NULL) // We can get an empty result. If so, move on
+		 if (entry_oi == NULL || od->od_ino == 0) // We can get an empty result. If so, move on
 		 {
 		 	f_pos++;
 		 	continue;
