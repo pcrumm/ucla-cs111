@@ -418,7 +418,7 @@ ospfs_dir_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *ign
 //   Returns: 1 at end of directory, 0 if filldir returns < 0 before the end
 //     of the directory, and -(error number) on error.
 //
-//   EXERCISE: Finish implementing this function.
+//   COMPLETED EXERCISE: Finish implementing this function.
 
 static int
 ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
