@@ -529,7 +529,7 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 /*****************************************************************************
  * FREE-BLOCK BITMAP OPERATIONS
  *
- * EXERCISE: Implement these functions.
+ * COMPLETED EXERCISE: Implement these functions.
  */
 
 // allocate_block()
@@ -623,7 +623,7 @@ free_block(uint32_t blockno)
 // Returns: 0 if block index 'b' requires using the doubly indirect
 //	       block, -1 if it does not.
 //
-// EXERCISE: Fill in this function.
+// COMPLETED EXERCISE: Fill in this function.
 
 static int32_t
 indir2_index(uint32_t b)
@@ -644,7 +644,7 @@ indir2_index(uint32_t b)
 //	    otherwise, the offset of the relevant indirect block within
 //		the doubly indirect block.
 //
-// EXERCISE: Fill in this function.
+// COMPLETED EXERCISE: Fill in this function.
 
 static int32_t
 indir_index(uint32_t b)
@@ -866,7 +866,7 @@ ospfs_notify_change(struct dentry *dentry, struct iattr *attr)
 //   as 'f_pos'; read data starting at that position, and update the position
 //   when you're done.
 //
-//   EXERCISE: Complete this function.
+//   COMPLETED EXERCISE: Complete this function.
 
 static ssize_t
 ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
@@ -877,7 +877,7 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 
 	// Make sure we don't read past the end of the file!
 	// Change 'count' so we never read past the end of the file.
-	/* EXERCISE: Your code here */
+	/* COMPLETED EXERCISE: Your code here */
 
 	// Check that both the requested offset and the count are within bounds
 	// Otherwise unsigned subtraction will correctly give us the offset, but
@@ -908,7 +908,7 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 		// Copy data into user space. Return -EFAULT if unable to write
 		// into user space.
 		// Use variable 'n' to track number of bytes moved.
-		/* EXERCISE: Your code here */
+		/* COMPLETED EXERCISE: Your code here */
 
 		data_offset = *f_pos % OSPFS_BLKSIZE;
 
