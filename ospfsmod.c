@@ -523,6 +523,8 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 		 // We now have all of the information the callback needs, so run it
 		 ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, od->od_ino, file_type); 
+
+		 f_pos++;
 	}
 
 	// Save the file position and return!
