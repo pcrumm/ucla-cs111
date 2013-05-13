@@ -24,3 +24,19 @@ Email: ipetkov@ucla.edu
 #Extra credit problem: none
 
 # Add any other information you'd like us to know below this line.
+
+If a file is resized so that it allocates additional blocks and nothing is
+written inside of the blocks immediately, this will cause a file leak when the
+file is deleted, or an I/O error the next time an attempt is made to resize
+the file. Blocks are calculated based on the size of the file, thus if new
+blocks are added and nothing is written, the module has no way to determine
+the block has already been allocated. If the file is deleted, this block will
+NOT get deallocated. This isn't an issue as Unix like files systems like OSPFS
+consider it okay for block leaks, and utilities like fsck will fix this.
+
+Such leaks will cause problems for later resizing, however, since the module
+will report an I/O error if it finds a non-zero block identifier where-ever it
+expects a non-allocated block. A remedy for this would be to hard copy the file
+to a new destination and delete the old (and reclaim the leaked blocks with
+fsck). Alternatively the module should not resize the file unless it intends
+to immediately write into the new block.

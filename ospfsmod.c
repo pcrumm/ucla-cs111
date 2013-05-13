@@ -1046,7 +1046,7 @@ remove_block(ospfs_inode_t *oi)
 //         (The value that the final add_block or remove_block set it to
 //          is probably not correct).
 //
-//   EXERCISE: Finish off this function.
+//   COMPLETED EXERCISE: Finish off this function.
 
 static int
 change_size(ospfs_inode_t *oi, uint32_t new_size)
@@ -1055,17 +1055,27 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 	int r = 0;
 
 	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+		r = add_block(oi);
+
+		// If no space is left, reset the file back to the old size
+		// The second loop will take care of this if we modify new_size
+		if(r == -ENOSPC)
+		{
+			new_size = old_size;
+			break;
+		}
+
+		if(r == -EIO)
+			return -EIO;
 	}
 	while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+		if(remove_block(oi) == -EIO)
+			return -EIO;
 	}
 
-	/* EXERCISE: Make sure you update necessary file meta data
-	             and return the proper value. */
-	return -EIO; // Replace this line
+	// Reset the size back to the actual number of bytes writen
+	oi->oi_size = old_size;
+	return r;
 }
 
 
