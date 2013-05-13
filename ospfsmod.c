@@ -1210,7 +1210,7 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 //   where you cannot read past the end of the file, it is OK to write past
 //   the end of the file; this should simply change the file's size.
 //
-//   EXERCISE: Complete this function.
+//   COMPLETED EXERCISE: Complete this function.
 
 static ssize_t
 ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *f_pos)
@@ -1221,17 +1221,35 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 
 	// Support files opened with the O_APPEND flag.  To detect O_APPEND,
 	// use struct file's f_flags field and the O_APPEND bit.
-	/* EXERCISE: Your code here */
+	/* COMPLETED EXERCISE: Your code here */
+
+	if(filp->f_flags & O_APPEND)
+		*f_pos = oi->oi_size;
 
 	// If the user is writing past the end of the file, change the file's
 	// size to accomodate the request.  (Use change_size().)
-	/* EXERCISE: Your code here */
+	/* COMPLETED EXERCISE: Your code here */
+
+	// Check for overflows in trying to write at an offset larger than possible
+	// and avoid shrinking the file as a result (and destroying data).
+	if(*f_pos + count < *f_pos)
+		return -EIO;
+
+	// Grow the file if needed and signal any -EIO or -ENOSPC errors
+	if(*f_pos + count >= oi->oi_size)
+		retval = change_size(oi, *f_pos + count);
+
+	if(retval != 0)
+		return retval;
 
 	// Copy data block by block
 	while (amount < count && retval >= 0) {
 		uint32_t blockno = ospfs_inode_blockno(oi, *f_pos);
 		uint32_t n;
 		char *data;
+
+		uint32_t data_offset; // Data offset from the start of the block
+		uint32_t bytes_left_to_copy = count - amount;
 
 		if (blockno == 0) {
 			retval = -EIO;
@@ -1245,8 +1263,17 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		// read user space.
 		// Keep track of the number of bytes moved in 'n'.
 		/* EXERCISE: Your code here */
-		retval = -EIO; // Replace these lines
-		goto done;
+
+		data_offset = *f_pos % OSPFS_BLKSIZE;
+		n = OSPFS_BLKSIZE - data_offset;
+
+		// Copy bytes either until we hit the end
+		// of the block or satisfy the user
+		if(n > bytes_left_to_copy)
+			n = bytes_left_to_copy;
+
+		if(copy_from_user(data + data_offset, buffer, n) > 0)
+			return -EFAULT;
 
 		buffer += n;
 		amount += n;
