@@ -1143,9 +1143,15 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 	/* COMPLETED EXERCISE: Your code here */
 
 	// Check that both the requested offset and the count are within bounds
-	// Otherwise unsigned subtraction will correctly give us the offset, but
-	// we won't detect overflows
-	if(*f_pos > oi->oi_size)
+	// as well as check for any overflows of *f_pos
+	// Otherwise modify the count to read within the file's bounds
+
+	// Note: if *f_pos is past the end of the file, we set the count to 0
+	// without signaling an -EIO error, as this seems to be the preferred
+	// behavior which the default test suite expects.
+	if(*f_pos + count < *f_pos)
+		return -EIO;
+	else if(*f_pos >= oi->oi_size)
 		count = 0;
 	else if(*f_pos + count > oi->oi_size)
 		count = oi->oi_size - *f_pos;

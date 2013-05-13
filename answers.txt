@@ -40,3 +40,13 @@ expects a non-allocated block. A remedy for this would be to hard copy the file
 to a new destination and delete the old (and reclaim the leaked blocks with
 fsck). Alternatively the module should not resize the file unless it intends
 to immediately write into the new block.
+
+When reading and writing to files with a given byte offset, an I/O error will
+occur if the sum of the specified offset and the count of bytes to read
+overflows. For example, if the specified offset is the max value loff_t can
+hold, and 10 bytes are requested to be read or written, the file system will
+report an error.
+
+Attempting to read past the end of a file, however, will simply read 0 bytes
+without signaling an I/O error. We have taken this approach as it seems to be
+the expected behavior given by the default test suite.
