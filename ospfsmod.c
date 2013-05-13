@@ -813,7 +813,7 @@ add_block(ospfs_inode_t *oi)
 
 		memset(ospfs_block(allocated[0]), 0, OSPFS_BLKSIZE);
 		oi->oi_direct[index_direct] = allocated[0];
-		oi->oi_size += OSPFS_BLKSIZE;
+		oi->oi_size = b * OSPFS_BLKSIZE;
 		return 0;
 	}
 
@@ -874,7 +874,7 @@ add_block(ospfs_inode_t *oi)
 	memset(ospfs_block(indir_data[index_direct]), 0, OSPFS_BLKSIZE);
 
 	// Set all inode variables as necessary
-	oi->oi_size += OSPFS_BLKSIZE;
+	oi->oi_size = b * OSPFS_BLKSIZE;
 
 	if(index_indir2 == 0)
 	{
@@ -958,7 +958,7 @@ remove_block(ospfs_inode_t *oi)
 
 		free_block(oi->oi_direct[index_direct]);
 		oi->oi_direct[index_direct] = 0;
-		oi->oi_size -= OSPFS_BLKSIZE;
+		oi->oi_size = b * OSPFS_BLKSIZE;
 		return 0;
 	}
 
@@ -986,7 +986,7 @@ remove_block(ospfs_inode_t *oi)
 	// Free the actual block
 	free_block(indir_data[index_direct]);
 	indir_data[index_direct] = 0;
-	oi->oi_size -= OSPFS_BLKSIZE;
+	oi->oi_size = b * OSPFS_BLKSIZE;
 
 	// If we removed the last possible pointer in the indirect block,
 	// free the indirect block as well
