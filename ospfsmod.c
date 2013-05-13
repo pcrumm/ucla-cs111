@@ -754,7 +754,7 @@ direct_index(uint32_t b)
 //          then oi->oi_size should remain unchanged. Any newly
 //          allocated blocks should be erased (set to zero).
 //
-// EXERCISE: Finish off this function.
+// COMPLETED EXERCISE: Finish off this function.
 //
 // Remember that allocating a new data block may require allocating
 // as many as three disk blocks, depending on whether a new indirect
@@ -774,12 +774,131 @@ add_block(ospfs_inode_t *oi)
 {
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
+	uint32_t b = n + 1;
 
 	// keep track of allocations to free in case of -ENOSPC
-	uint32_t *allocated[2] = { 0, 0 };
+	uint32_t allocated[2] = { 0, 0 };
 
-	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+	int32_t index_indir2;
+	int32_t index_indir;
+	int32_t index_direct;
+
+	uint32_t indir_block;
+	uint32_t double_indir_block;
+
+	uint32_t *indir_data = NULL;
+	uint32_t *double_indir_data = NULL;
+
+	const int INDIR_2_BLOCK = 0;
+	const int INDIR_BLOCK = 1;
+	int r = -ENOSPC;
+
+	/* COMPLETED EXERCISE: Your code here */
+
+	if(n == OSPFS_MAXFILEBLKS)
+		return -ENOSPC;
+
+	index_indir2 = indir2_index(b);
+	index_indir  = indir_index(b);
+	index_direct = direct_index(b);
+
+	if(index_indir == -1) // We can store the new block directly in the inode
+	{
+		// Sanity check that there is no existing allocated block
+		if(oi->oi_direct[index_direct] != 0)
+			return -EIO;
+
+		if((allocated[0] = allocate_block()) == 0)
+			goto nospace;
+
+		memset(ospfs_block(allocated[0]), 0, OSPFS_BLKSIZE);
+		oi->oi_direct[index_direct] = allocated[0];
+		oi->oi_size += OSPFS_BLKSIZE;
+		return 0;
+	}
+
+	if(index_indir2 == 0) // If we need the double indirect block
+	{
+		if(oi->oi_indirect2 == 0) // and it is null, allocate it
+		{
+			if((allocated[INDIR_2_BLOCK] = allocate_block()) == 0)
+				goto nospace;
+
+			double_indir_block = allocated[INDIR_2_BLOCK];
+			double_indir_data = ospfs_block(double_indir_block);
+
+			memset(double_indir_data, 0, OSPFS_BLKSIZE);
+		}
+		else // otherwise use the existing double indirect block
+		{
+			double_indir_block = oi->oi_indirect2;
+			double_indir_data = ospfs_block(double_indir_block);
+		}
+
+		// Allocate the indirect block if needed
+		if(double_indir_data[index_indir] == 0)
+		{
+			if((allocated[INDIR_BLOCK] = allocate_block()) == 0)
+				goto nospace;
+
+			indir_block = allocated[INDIR_BLOCK];
+			indir_data = ospfs_block(indir_block);
+
+			memset(indir_data, 0, OSPFS_BLKSIZE);
+		}
+	}
+
+	// We only need a single indirect, so allocate it if necessary
+	else if(oi->oi_indirect == 0)
+	{
+		if((allocated[INDIR_BLOCK] = allocate_block()) == 0)
+			goto nospace;
+
+		indir_block = allocated[INDIR_BLOCK];
+		indir_data = ospfs_block(indir_block);
+
+		memset(indir_data, 0, OSPFS_BLKSIZE);
+	}
+
+	// Sanity check that there is no existing allocated block
+	if(indir_data[index_direct] != 0)
+	{
+		r = -EIO;
+		goto nospace;
+	}
+
+	// Allocate the actual block
+	if((indir_data[index_direct] = allocate_block()) == 0)
+		goto nospace;
+
+	memset(ospfs_block(indir_data[index_direct]), 0, OSPFS_BLKSIZE);
+
+	// Set all inode variables as necessary
+	oi->oi_size += OSPFS_BLKSIZE;
+
+	if(index_indir2 == 0)
+	{
+		if(oi->oi_indirect2 == 0)
+			oi->oi_indirect2 = double_indir_block;
+
+		if(double_indir_data[index_indir] == 0)
+			double_indir_data[index_indir] = indir_block;
+	}
+	else if(oi->oi_indirect == 0)
+	{
+		oi->oi_indirect = indir_block;
+	}
+
+	return 0;
+
+	nospace:
+		if(allocated[INDIR_2_BLOCK] != 0)
+			free_block(allocated[INDIR_2_BLOCK]);
+
+		if(allocated[INDIR_BLOCK] != 0)
+			free_block(allocated[INDIR_BLOCK]);
+
+		return r;
 }
 
 
