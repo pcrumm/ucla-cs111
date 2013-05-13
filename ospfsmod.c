@@ -783,8 +783,8 @@ add_block(ospfs_inode_t *oi)
 	int32_t index_indir;
 	int32_t index_direct;
 
-	uint32_t indir_block;
-	uint32_t double_indir_block;
+	uint32_t indir_block = 0;
+	uint32_t double_indir_block = 0;
 
 	uint32_t *indir_data = NULL;
 	uint32_t *double_indir_data = NULL;
@@ -935,8 +935,8 @@ remove_block(ospfs_inode_t *oi)
 	int32_t index_indir;
 	int32_t index_direct;
 
-	uint32_t indir_block;
-	uint32_t double_indir_block;
+	uint32_t indir_block = 0;
+	uint32_t double_indir_block = 0;
 
 	uint32_t *indir_data = NULL;
 	uint32_t *double_indir_data = NULL;
