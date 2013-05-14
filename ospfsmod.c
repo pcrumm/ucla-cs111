@@ -1345,7 +1345,7 @@ find_direntry(ospfs_inode_t *dir_oi, const char *name, int namelen)
 //
 //	The create_blank_direntry function should use this convention.
 //
-// EXERCISE: Write this function.
+// COMPLETED EXERCISE: Write this function.
 
 static ospfs_direntry_t *
 create_blank_direntry(ospfs_inode_t *dir_oi)
@@ -1357,8 +1357,38 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	//    Use ERR_PTR if this fails; otherwise, clear out all the directory
 	//    entries and return one of them.
 
-	/* EXERCISE: Your code here. */
-	return ERR_PTR(-EINVAL); // Replace this line
+	uint32_t n = ospfs_size2nblocks(dir_oi->oi_size);
+	uint32_t b, i, new_size;
+	ospfs_direntry_t *data = NULL;
+	int retval = 0;
+
+	for(b = 0; b < n; b++)
+	{
+		data = ospfs_block(ospfs_inode_blockno(dir_oi, b));
+
+		if(data == NULL)
+			return ERR_PTR(-EIO);
+
+		for(i = 0; i < OSPFS_BLKSIZE / OSPFS_DIRENTRY_SIZE; i++)
+		{
+			if(data[i].od_ino == 0)
+				return data + i;
+		}
+	}
+
+	// If no free entries were found, add a block
+	// Blocks are zero filled at allocation, thus
+	// all new entries will be free
+	new_size = (n + 1) * OSPFS_BLKSIZE;
+	retval = change_size(dir_oi, new_size);
+
+	if(retval != 0)
+		return ERR_PTR(retval);
+
+	dir_oi->oi_size = new_size;
+	data = ospfs_block(ospfs_inode_blockno(dir_oi, n));
+
+	return data;
 }
 
 // ospfs_link(src_dentry, dir, dst_dentry
