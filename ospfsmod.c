@@ -1386,44 +1386,34 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	//    Use ERR_PTR if this fails; otherwise, clear out all the directory
 	//    entries and return one of them.
 
-	uint32_t n = ospfs_size2nblocks(dir_oi->oi_size);
-	uint32_t b, i, new_size;
-	ospfs_direntry_t *data = NULL;
-	int retval = 0;
+	uint32_t new_size;
+	ospfs_direntry_t *od;
+	int retval = 0, off;
 
 	// Sanity check the inode and check that we can add another link
 	// without overflowing and marking the inode for deletion
 	if(dir_oi->oi_ftype != OSPFS_FTYPE_DIR || dir_oi->oi_nlink + 1 == 0)
 		return ERR_PTR(-EIO);
 
-	for(b = 0; b < n; b++)
+	for(off = 0; off < dir_oi->oi_size; off += OSPFS_DIRENTRY_SIZE)
 	{
-		data = ospfs_block(ospfs_inode_blockno(dir_oi, b));
-
-		if(data == NULL)
-			return ERR_PTR(-EIO);
-
-		for(i = 0; i < OSPFS_BLKSIZE / OSPFS_DIRENTRY_SIZE; i++)
-		{
-			if(data[i].od_ino == 0)
-				return data + i;
-		}
+		od = ospfs_inode_data(dir_oi, off);
+		if(od->od_ino == 0)
+			return od;
 	}
 
 	// If no free entries were found, add a block
 	// Blocks are zero filled at allocation, thus
 	// all new entries will be free
-	new_size = (n + 1) * OSPFS_BLKSIZE;
+	new_size = (ospfs_size2nblocks(dir_oi->oi_size) + 1) * OSPFS_BLKSIZE;
 	retval = change_size(dir_oi, new_size);
 
 	if(retval != 0)
 		return ERR_PTR(retval);
 
 	dir_oi->oi_size = new_size;
-	data = ospfs_block(ospfs_inode_blockno(dir_oi, n));
-	dir_oi->oi_nlink++;
 
-	return data;
+	return ospfs_inode_data(dir_oi, off + OSPFS_DIRENTRY_SIZE);
 }
 
 // ospfs_link(src_dentry, dir, dst_dentry
