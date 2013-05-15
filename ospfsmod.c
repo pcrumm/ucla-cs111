@@ -1418,12 +1418,41 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 //               -ENOSPC       if the disk is full & the file can't be created;
 //               -EIO          on I/O error.
 //
-//   EXERCISE: Complete this function.
+//   COMPLETED EXERCISE: Complete this function.
 
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
-	/* EXERCISE: Your code here. */
-	return -EINVAL;
+
+	ospfs_inode_t *dir_oi = ospfs_inode(src_dentry->d_inode->i_ino);
+	ospfs_direntry_t *new_entry;
+	(void)dir; // Suppress the "unused variable" warning
+
+	// Check that the block is actually valid and check for link count overflows
+	// We don't want to accidentally free an inode by zeroing it's link count
+	// Also check that we are actually dealing with a directory inode
+	if(dir_oi == NULL || dir_oi->oi_nlink + 1 == 0 || dir_oi->oi_ftype != OSPFS_FTYPE_DIR)
+		return -EIO;
+
+	if(dst_dentry->d_name.len > OSPFS_MAXSYMLINKLEN)
+		return -ENAMETOOLONG;
+
+	if(find_direntry(dir_oi, dst_dentry->d_name.name, dst_dentry->d_name.len) != NULL)
+		return -EEXIST;
+
+	new_entry = create_blank_direntry(dir_oi);
+
+	if(IS_ERR(new_entry))
+		return PTR_ERR(new_entry);
+	else if(new_entry == NULL)
+		return -EIO;
+
+	new_entry->od_ino = src_dentry->d_inode->i_ino;
+	memcpy(new_entry->od_name, dst_dentry->d_name.name, dst_dentry->d_name.len);
+	new_entry->od_name[dst_dentry->d_name.len] = '\0';
+
+	dir_oi->oi_nlink++;
+
+	return 0;
 }
 
 // ospfs_create
