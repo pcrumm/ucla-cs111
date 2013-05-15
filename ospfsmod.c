@@ -1482,15 +1482,56 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 //   2. Find an empty inode.  Set the 'entry_ino' variable to its inode number.
 //   3. Initialize the directory entry and inode.
 //
-//   EXERCISE: Complete this function.
+//   COMPLETED EXERCISE: Complete this function.
 
 static int
 ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd)
 {
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
+	ospfs_inode_t *file_oi = NULL;
+	ospfs_direntry_t *new_entry = NULL;
 	uint32_t entry_ino = 0;
-	/* EXERCISE: Your code here. */
-	return -EINVAL; // Replace this line
+	int retval = 0;
+
+	// Sanity check the inode and check that we can add another link
+	// without overflowing and marking the inode for deletion
+	if(dir_oi->oi_ftype != OSPFS_FTYPE_DIR || dir_oi->oi_nlink + 1 == 0)
+		return -EIO;
+
+	if(dentry->d_name.len > OSPFS_MAXNAMELEN)
+		return -ENAMETOOLONG;
+
+	if(find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len) != NULL)
+		return -EEXIST;
+
+	new_entry = create_blank_direntry(dir_oi);
+	if(IS_ERR(new_entry))
+	{
+		retval = PTR_ERR(new_entry);
+		goto error_cleanup;
+	}
+
+	// Allocate a single block for the file
+	entry_ino = allocate_block();
+	file_oi = ospfs_inode(entry_ino);
+	if(entry_ino == 0 || file_oi == NULL)
+	{
+		retval = (entry_ino == 0 ? -ENOSPC : -EIO);
+		goto error_cleanup;
+	}
+
+	// We've successfully created a new file, set it's flags,
+	// increment the directory's link count, and set the new dentry
+	file_oi->oi_size = 0;
+	file_oi->oi_ftype = OSPFS_FTYPE_REG;
+	file_oi->oi_nlink = 1;
+	file_oi->oi_mode = mode;
+
+	dir_oi->oi_nlink++;
+
+	new_entry->od_ino = entry_ino;
+	memcpy(new_entry->od_name, dentry->d_name.name, dentry->d_name.len);
+	new_entry->od_name[dentry->d_name.len] = '\0';
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
@@ -1502,6 +1543,15 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 		d_instantiate(dentry, i);
 		return 0;
 	}
+
+	error_cleanup:
+		if(entry_ino != 0)
+			free_block(entry_ino);
+
+		if(!IS_ERR(new_entry) && new_entry != NULL)
+			new_entry->od_ino = 0;
+
+		return retval;
 }
 
 
