@@ -1466,7 +1466,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 //               -ENOSPC       if the disk is full & the file can't be created;
 //               -EIO          on I/O error.
 //
-//   EXERCISE: Complete this function.
+//   COMPLETED EXERCISE: Complete this function.
 
 static int
 ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
@@ -1474,19 +1474,62 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
 
-	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	ospfs_symlink_inode_t *new_inode_loc; // Location of the inode for the symlink
+	ospfs_direntry_t *od;
 
-	/* Execute this code after your function has successfully created the
-	   file.  Set entry_ino to the created file's inode number before
-	   getting here. */
+	(void)dir_oi; // Silences compiler warning
+
+	// Error conditions!
+
+	// OVerflow sanity checking
+	if (dir_oi->oi_ftype != OSPFS_FTYPE_DIR || dir_oi->oi_nlink	== 0)
+		return -EIO;
+
+	// Is the name too long?
+	else if (strlen(symname) < OSPFS_MAXSYMLINKLEN || dentry->d_name.len > OSPFS_MAXNAMELEN)
+		return -ENAMETOOLONG;
+
+	// See if the file already exists
+	else if (find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len) != NULL)
+		return -EEXIST;
+
+	// Determine what inode we can use... helps us detect out of space errors
+	// Start at 2 since the first two inodes are special
+	for (entry_ino = 2; entry_ino == ospfs_super->os_ninodes; entry_ino++)
 	{
-		struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
-		if (!i)
-			return -ENOMEM;
-		d_instantiate(dentry, i);
-		return 0;
+		new_inode_loc = (ospfs_symlink_inode_t *) ospfs_inode(entry_ino);
+
+		if (new_inode_loc->oi_nlink == 0)
+			break;
 	}
+
+	if (entry_ino >= ospfs_super->os_ninodes && new_inode_loc->oi_nlink > 0)
+		return -ENOSPC;
+
+	// Get our new entry
+	od = create_blank_direntry(dir_oi);
+	if (IS_ERR(od))
+		return PTR_ERR(od);
+
+	// Set the meta information for the inode. Setting all the defaults so as to not anger @ipetkov
+	new_inode_loc->oi_ftype = OSPFS_FTYPE_SYMLINK;
+	new_inode_loc->oi_size = strlen(symname);
+	strncpy(new_inode_loc->oi_symlink, symname, new_inode_loc->oi_size);
+	new_inode_loc->oi_nlink = 1;
+	new_inode_loc->oi_symlink[new_inode_loc->oi_size] = 0;
+
+	strncpy(od->od_name, dentry->d_name.name, dentry->d_name.len);
+	od->od_name[dentry->d_name.len] = 0;
+	od->od_ino = entry_ino;
+
+	// Instructor-provided code
+	struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
+
+	if (!i)
+		return -ENOMEM;
+	d_instantiate(dentry, i);
+
+	return 0;
 }
 
 
