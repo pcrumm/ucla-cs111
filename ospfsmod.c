@@ -1257,12 +1257,28 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 
 	// Copy data block by block
 	while (amount < count && retval >= 0) {
-		uint32_t blockno = ospfs_inode_blockno(oi, *f_pos);
+		uint32_t blockno;
 		uint32_t n;
+		int32_t appended = 0;
 		char *data;
 
 		uint32_t data_offset; // Data offset from the start of the block
 		uint32_t bytes_left_to_copy = count - amount;
+
+		// ospfs_inode_blockno reports an error when *f_pos == oi->oi_size
+		// thus we artificially increase for it to work right. The allocated
+		// size has already been grown so we won't go out of bounds
+		if(*f_pos == oi->oi_size)
+		{
+			if(oi->oi_size == OSPFS_MAXFILESIZE)
+				return -EIO;
+
+			oi->oi_size++;
+			blockno = ospfs_inode_blockno(oi, *f_pos);
+			oi->oi_size--;
+		}
+		else // No extra precautions necessary
+			blockno = ospfs_inode_blockno(oi, *f_pos);
 
 		if (blockno == 0) {
 			retval = -EIO;
@@ -1288,6 +1304,12 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		if(copy_from_user(data + data_offset, buffer, n) > 0)
 			return -EFAULT;
 
+		appended = (*f_pos + n) - oi->oi_size;
+
+		if(appended < 0)
+			appended = 0;
+
+		oi->oi_size += appended;
 		buffer += n;
 		amount += n;
 		*f_pos += n;
