@@ -1540,7 +1540,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 //   Inputs: dentry -- the symbolic link's directory entry
 //           nd     -- to be filled in with the symbolic link's destination
 //
-//   Exercise: Expand this function to handle conditional symlinks.  Conditional
+//   COMPLETED Exercise: Expand this function to handle conditional symlinks.  Conditional
 //   symlinks will always be created by users in the following form
 //     root?/path/1:/path/2.
 //   (hint: Should the given form be changed in any way to make this method
@@ -1551,9 +1551,36 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	ospfs_symlink_inode_t *oi =
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
-	// Exercise: Your code here.
+	
+	/**
+	 * As above, a conditional symlink will always have
+	 * ? followed by :
+	 */
 
-	nd_set_link(nd, oi->oi_symlink);
+	char *qmark = strpbrk(oi->oi_symlink, "?");
+	char *colon = strpbrk(oi->oi_symlink, ":");
+	char *root_path;
+
+	if (colon && qmark && qmark < colon) // If true, we're conditional
+	{
+		if (current->uid)
+		{
+			// We aren't root, so we use the second part of the expression
+			nd_set_link(nd, colon + 1);
+		}
+		else
+		{
+			// We are root, so use the first part
+			root_path = kmalloc(oi->oi_size, GFP_ATOMIC); // Cheat and make a bigger buffer than we need
+			memset(root_path, '\0', oi->oi_size);
+			strncpy(root_path, qmark + 1, (int)(qmark - colon));
+
+			nd_set_link(nd, root_path);
+		}
+	}
+	else
+		nd_set_link(nd, oi->oi_symlink);
+
 	return (void *) 0;
 }
 
