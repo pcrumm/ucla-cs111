@@ -571,6 +571,9 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 	od->od_ino = 0;
 	oi->oi_nlink--;
 
+	// Lower the parent directory's link count as well
+	dir_oi->oi_nlink--;
+
 	// Handle symbolic link deletion: actually remove the file if it's gone
 	if (oi->oi_nlink == 0 && oi->oi_ftype != OSPFS_FTYPE_SYMLINK)
 		change_size(oi, 0);
@@ -1447,10 +1450,9 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
-
-	ospfs_inode_t *dir_oi = ospfs_inode(src_dentry->d_inode->i_ino);
+	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
+	ospfs_inode_t *src_oi = ospfs_inode(src_dentry->d_inode->i_ino);
 	ospfs_direntry_t *new_entry;
-	(void)dir; // Suppress the "unused variable" warning
 
 	// Check that the block is actually valid and check for link count overflows
 	// We don't want to accidentally free an inode by zeroing it's link count
@@ -1475,6 +1477,8 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 	memcpy(new_entry->od_name, dst_dentry->d_name.name, dst_dentry->d_name.len);
 	new_entry->od_name[dst_dentry->d_name.len] = '\0';
 
+	// Increase the links on both the source file and the link's parent directory
+	src_oi->oi_nlink++;
 	dir_oi->oi_nlink++;
 
 	return 0;
@@ -1517,6 +1521,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	ospfs_direntry_t *new_entry = NULL;
 	uint32_t entry_ino = 0;
 	int retval = 0;
+	struct inode *i;
 
 	// Sanity check the inode and check that we can add another link
 	// without overflowing and marking the inode for deletion
@@ -1562,13 +1567,11 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
 	   getting here. */
-	{
-		struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
-		if (!i)
-			return -ENOMEM;
-		d_instantiate(dentry, i);
-		return 0;
-	}
+	i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
+	if (!i)
+		return -ENOMEM;
+	d_instantiate(dentry, i);
+	return 0;
 
 	error_cleanup:
 		if(entry_ino != 0)
