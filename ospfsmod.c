@@ -774,7 +774,6 @@ add_block(ospfs_inode_t *oi)
 {
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
-	uint32_t b = n + 1;
 
 	// keep track of allocations to free in case of -ENOSPC
 	uint32_t allocated[2] = { 0, 0 };
@@ -798,9 +797,14 @@ add_block(ospfs_inode_t *oi)
 	if(n == OSPFS_MAXFILEBLKS)
 		return -ENOSPC;
 
-	index_indir2 = indir2_index(b);
-	index_indir  = indir_index(b);
-	index_direct = direct_index(b);
+	// If the file size is zero and we already
+	// have an allocated block, allocate the next block (add one)
+	if(oi->oi_size == 0 && oi->oi_direct[0] != 0)
+		n = 1;
+
+	index_indir2 = indir2_index(n);
+	index_indir  = indir_index(n);
+	index_direct = direct_index(n);
 
 	if(index_indir == -1) // We can store the new block directly in the inode
 	{
@@ -813,7 +817,7 @@ add_block(ospfs_inode_t *oi)
 
 		memset(ospfs_block(allocated[0]), 0, OSPFS_BLKSIZE);
 		oi->oi_direct[index_direct] = allocated[0];
-		oi->oi_size = b * OSPFS_BLKSIZE;
+		oi->oi_size = (n + 1) * OSPFS_BLKSIZE;
 		return 0;
 	}
 
@@ -874,7 +878,7 @@ add_block(ospfs_inode_t *oi)
 	memset(ospfs_block(indir_data[index_direct]), 0, OSPFS_BLKSIZE);
 
 	// Set all inode variables as necessary
-	oi->oi_size = b * OSPFS_BLKSIZE;
+	oi->oi_size = (n + 1) * OSPFS_BLKSIZE;
 
 	if(index_indir2 == 0)
 	{
@@ -929,7 +933,6 @@ remove_block(ospfs_inode_t *oi)
 {
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
-	uint32_t b = n - 1;
 
 	int32_t index_indir2;
 	int32_t index_indir;
@@ -943,12 +946,15 @@ remove_block(ospfs_inode_t *oi)
 
 	/* COMPLETED EXERCISE: Your code here */
 
+	// If there are no allocated blocks, (size is already 0) return
 	if(n == 0)
-		return -EIO;
+		return 0;
+	else
+		n--;
 
-	index_indir2 = indir2_index(b);
-	index_indir  = indir_index(b);
-	index_direct = direct_index(b);
+	index_indir2 = indir2_index(n);
+	index_indir  = indir_index(n);
+	index_direct = direct_index(n);
 
 	if(index_indir == -1) // The block is directly stored in the inode
 	{
@@ -958,7 +964,7 @@ remove_block(ospfs_inode_t *oi)
 
 		free_block(oi->oi_direct[index_direct]);
 		oi->oi_direct[index_direct] = 0;
-		oi->oi_size = b * OSPFS_BLKSIZE;
+		oi->oi_size = n * OSPFS_BLKSIZE;
 		return 0;
 	}
 
@@ -986,7 +992,7 @@ remove_block(ospfs_inode_t *oi)
 	// Free the actual block
 	free_block(indir_data[index_direct]);
 	indir_data[index_direct] = 0;
-	oi->oi_size = b * OSPFS_BLKSIZE;
+	oi->oi_size = n * OSPFS_BLKSIZE;
 
 	// If we removed the last possible pointer in the indirect block,
 	// free the indirect block as well
