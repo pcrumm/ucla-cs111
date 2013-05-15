@@ -1604,7 +1604,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 //               -ENOSPC       if the disk is full & the file can't be created;
 //               -EIO          on I/O error.
 //
-//   EXERCISE: Complete this function.
+//   COMPLETED EXERCISE: Complete this function.
 
 static int
 ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
@@ -1612,19 +1612,64 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
 
-	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	ospfs_symlink_inode_t *new_inode_loc; // Location of the inode for the symlink
+	ospfs_direntry_t *od;
 
-	/* Execute this code after your function has successfully created the
-	   file.  Set entry_ino to the created file's inode number before
-	   getting here. */
+	(void)dir_oi; // Silences compiler warning
+
+	// Error conditions!
+
+	// Overflow sanity checking
+	if (dir_oi->oi_ftype != OSPFS_FTYPE_DIR || dir_oi->oi_nlink + 1	== 0)
+		return -EIO;
+
+	// Is the name too long?
+	else if (strlen(symname) < OSPFS_MAXSYMLINKLEN || dentry->d_name.len > OSPFS_MAXNAMELEN)
+		return -ENAMETOOLONG;
+
+	// See if the file already exists
+	else if (find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len) != NULL)
+		return -EEXIST;
+
+	// Determine what inode we can use... helps us detect out of space errors
+	// Start at 2 since the first two inodes are special
+	for (entry_ino = 2; entry_ino == ospfs_super->os_ninodes; entry_ino++)
+	{
+		new_inode_loc = (ospfs_symlink_inode_t *) ospfs_inode(entry_ino);
+
+		if (new_inode_loc->oi_nlink == 0)
+			break;
+	}
+
+	if (entry_ino >= ospfs_super->os_ninodes && new_inode_loc->oi_nlink > 0)
+		return -ENOSPC;
+
+	// Get our new entry
+	od = create_blank_direntry(dir_oi);
+	if (IS_ERR(od))
+		return PTR_ERR(od);
+
+	// Set the meta information for the inode. Setting all the defaults so as to not anger @ipetkov
+	new_inode_loc->oi_ftype = OSPFS_FTYPE_SYMLINK;
+	new_inode_loc->oi_size = strlen(symname);
+	strncpy(new_inode_loc->oi_symlink, symname, new_inode_loc->oi_size);
+	new_inode_loc->oi_nlink = 1;
+	new_inode_loc->oi_symlink[new_inode_loc->oi_size] = 0;
+
+	strncpy(od->od_name, dentry->d_name.name, dentry->d_name.len);
+	od->od_name[dentry->d_name.len] = 0;
+	od->od_ino = entry_ino;
+
+	// Instructor-provided code
 	{
 		struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
+	
 		if (!i)
 			return -ENOMEM;
 		d_instantiate(dentry, i);
-		return 0;
 	}
+
+	return 0;
 }
 
 
@@ -1635,7 +1680,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 //   Inputs: dentry -- the symbolic link's directory entry
 //           nd     -- to be filled in with the symbolic link's destination
 //
-//   Exercise: Expand this function to handle conditional symlinks.  Conditional
+//   COMPLETED Exercise: Expand this function to handle conditional symlinks.  Conditional
 //   symlinks will always be created by users in the following form
 //     root?/path/1:/path/2.
 //   (hint: Should the given form be changed in any way to make this method
@@ -1646,9 +1691,36 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	ospfs_symlink_inode_t *oi =
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
-	// Exercise: Your code here.
+	
+	/**
+	 * As above, a conditional symlink will always have
+	 * ? followed by :
+	 */
 
-	nd_set_link(nd, oi->oi_symlink);
+	char *qmark = strpbrk(oi->oi_symlink, "?");
+	char *colon = strpbrk(oi->oi_symlink, ":");
+	char *root_path;
+
+	if (colon && qmark && qmark < colon) // If true, we're conditional
+	{
+		if (current->uid)
+		{
+			// We aren't root, so we use the second part of the expression
+			nd_set_link(nd, colon + 1);
+		}
+		else
+		{
+			// We are root, so use the first part
+			root_path = kmalloc(oi->oi_size, GFP_ATOMIC); // Cheat and make a bigger buffer than we need
+			memset(root_path, '\0', oi->oi_size);
+			strncpy(root_path, qmark + 1, (int)(qmark - colon));
+
+			nd_set_link(nd, root_path);
+		}
+	}
+	else
+		nd_set_link(nd, oi->oi_symlink);
+
 	return (void *) 0;
 }
 
