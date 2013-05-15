@@ -1481,8 +1481,8 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 
 	// Error conditions!
 
-	// OVerflow sanity checking
-	if (dir_oi->oi_ftype != OSPFS_FTYPE_DIR || dir_oi->oi_nlink	== 0)
+	// Overflow sanity checking
+	if (dir_oi->oi_ftype != OSPFS_FTYPE_DIR || dir_oi->oi_nlink + 1	== 0)
 		return -EIO;
 
 	// Is the name too long?
