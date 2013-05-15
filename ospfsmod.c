@@ -1363,6 +1363,11 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	ospfs_direntry_t *data = NULL;
 	int retval = 0;
 
+	// Sanity check the inode and check that we can add another link
+	// without overflowing and marking the inode for deletion
+	if(dir_oi->oi_ftype != OSPFS_FTYPE_DIR || dir_oi->oi_nlink + 1 == 0)
+		return ERR_PTR(-EIO);
+
 	for(b = 0; b < n; b++)
 	{
 		data = ospfs_block(ospfs_inode_blockno(dir_oi, b));
@@ -1388,6 +1393,7 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 
 	dir_oi->oi_size = new_size;
 	data = ospfs_block(ospfs_inode_blockno(dir_oi, n));
+	dir_oi->oi_nlink++;
 
 	return data;
 }
@@ -1527,6 +1533,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	file_oi->oi_ftype = OSPFS_FTYPE_REG;
 	file_oi->oi_nlink = 1;
 	file_oi->oi_mode = mode;
+	file_oi->oi_direct[0] = entry_ino;
 
 	dir_oi->oi_nlink++;
 
