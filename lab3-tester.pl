@@ -104,7 +104,7 @@ close FOO;
     ],
    
     # truncate the large file
-    #16
+    #17
     [ 'echo truncernated11 > test/yes.txt | ls -l test/yes.txt | awk \'{ print $5 }\' ; rm test/yes.txt',
       '15'
     ],
