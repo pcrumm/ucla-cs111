@@ -1052,6 +1052,7 @@ static int
 change_size(ospfs_inode_t *oi, uint32_t new_size)
 {
 	uint32_t old_size = oi->oi_size;
+	uint32_t final_size = (old_size > new_size ? new_size : old_size);
 	int r = 0;
 
 	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
@@ -1073,8 +1074,8 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 			return -EIO;
 	}
 
-	// Reset the size back to the actual number of bytes writen
-	oi->oi_size = old_size;
+	// Reset the size back to what it was if the file grew, or down to what it shrank to
+	oi->oi_size = final_size;
 	return r;
 }
 
