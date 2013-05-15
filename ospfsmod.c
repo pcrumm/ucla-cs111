@@ -1523,11 +1523,13 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	od->od_ino = entry_ino;
 
 	// Instructor-provided code
-	struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
-
-	if (!i)
-		return -ENOMEM;
-	d_instantiate(dentry, i);
+	{
+		struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
+	
+		if (!i)
+			return -ENOMEM;
+		d_instantiate(dentry, i);
+	}
 
 	return 0;
 }
