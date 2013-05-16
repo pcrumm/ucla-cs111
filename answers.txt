@@ -50,3 +50,10 @@ report an error.
 Attempting to read past the end of a file, however, will simply read 0 bytes
 without signaling an I/O error. We have taken this approach as it seems to be
 the expected behavior given by the default test suite.
+
+Note: using the ls or any other Linux file utility will NOT display the proper
+link counts for files in the OSPFS. Link counts are maintained internally and
+function as expected, however, our module does not update any inode structures
+that Linux passes in. Thus, for example, the ls utility will look at the native
+Linux inode link counts, so don't be surprised if it reports and unexpected
+link count.
