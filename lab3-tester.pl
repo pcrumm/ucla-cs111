@@ -139,7 +139,7 @@ close FOO;
       'diff <( cat ../foo ) ../sym && ' .
       'diff <( cat message.txt) sym; ' .
       'cd ../..; ' .
-      'rm test/sym test/subdir/sym',
+      'rm test/sym test/subdir/sym test/foo',
       ''
     ],
 
@@ -155,6 +155,15 @@ close FOO;
       'rm root.txt not_root.txt amiroot; ' .
       'cd ..',
       "Root Not root"
+    ],
+
+    # another check that symlinks work relative to current path
+    # 22
+    [ 'echo this is foo > test/foo; ' .
+      'ln -s ../foo test/subdir/sym && ' .
+      'diff test/foo test/subdir/sym && ' .
+      'rm test/subdir/sym test/foo',
+      ''
     ]
 );
 
