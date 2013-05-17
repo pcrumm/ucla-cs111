@@ -1561,7 +1561,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 		goto error_cleanup;
 	}
 
-	// Allocate a single block for the file and get an inode
+	// Get an inode and check if there is an available block to be allocated
 	entry_ino = find_free_inode();
 	block_no = allocate_block();
 	if(entry_ino == 0 || block_no == 0)
@@ -1570,6 +1570,11 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 		goto error_cleanup;
 	}
 
+	// Since there is an available block, we free it again. If a write is attempted
+	// another block will be allocated. We do this to avoid block leaks from operations
+	// like touching a file and immediately deleting it. Since nothing was written
+	// the module will believe no blocks have been allocated.
+	free_block(block_no);
 	file_oi = ospfs_inode(entry_ino);
 
 	if(file_oi == NULL)
@@ -1584,7 +1589,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	file_oi->oi_ftype = OSPFS_FTYPE_REG;
 	file_oi->oi_nlink = 1;
 	file_oi->oi_mode = mode;
-	file_oi->oi_direct[0] = block_no;
+	file_oi->oi_direct[0] = 0;
 
 	dir_oi->oi_nlink++;
 
@@ -1602,8 +1607,8 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	return 0;
 
 	error_cleanup:
-		if(entry_ino != 0)
-			free_block(entry_ino);
+		if(block_no != 0)
+			free_block(block_no);
 
 		if(!IS_ERR(new_entry) && new_entry != NULL)
 			new_entry->od_ino = 0;

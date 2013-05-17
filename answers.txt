@@ -25,21 +25,14 @@ Email: ipetkov@ucla.edu
 
 # Add any other information you'd like us to know below this line.
 
-If a file is resized so that it allocates additional blocks and nothing is
-written inside of the blocks immediately, this will cause a file leak when the
-file is deleted, or an I/O error the next time an attempt is made to resize
-the file. Blocks are calculated based on the size of the file, thus if new
-blocks are added and nothing is written, the module has no way to determine
-the block has already been allocated. If the file is deleted, this block will
-NOT get deallocated. This isn't an issue as Unix like files systems like OSPFS
-consider it okay for block leaks, and utilities like fsck will fix this.
-
-Such leaks will cause problems for later resizing, however, since the module
-will report an I/O error if it finds a non-zero block identifier where-ever it
-expects a non-allocated block. A remedy for this would be to hard copy the file
-to a new destination and delete the old (and reclaim the leaked blocks with
-fsck). Alternatively the module should not resize the file unless it intends
-to immediately write into the new block.
+Since our module uses file sizes to determine how many blocks have been
+allocated to an inode, leaving a file with a size of zero will cause a block
+leak when the file is deleted. For example, this can happen if a file is
+created and nothing is written to it. To avoid this, we only allocate a block
+when the first write occurs. We allocate a block during creation, however, to
+make sure there is at least one available, but it is immediately freed. Thus
+it is entirely possible for a file to be successfully created, but the last
+possible block allocated to another file before a write can occur.
 
 When reading and writing to files with a given byte offset, an I/O error will
 occur if the sum of the specified offset and the count of bytes to read
