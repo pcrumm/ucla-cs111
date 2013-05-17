@@ -57,3 +57,8 @@ function as expected, however, our module does not update any inode structures
 that Linux passes in. Thus, for example, the ls utility will look at the native
 Linux inode link counts, so don't be surprised if it reports and unexpected
 link count.
+
+Since conditional links in this lab will always begin with "root?" our
+implementation simply checks that the symlink takes the form "?<file1>:<file2>".
+In the case of more robust conditional links we would implement more elaborate
+checks, but for the purpose of this lab we have not.

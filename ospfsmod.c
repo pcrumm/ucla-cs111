@@ -1615,6 +1615,9 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	ospfs_symlink_inode_t *new_inode_loc = NULL; // Location of the inode for the symlink
 	ospfs_direntry_t *od;
 
+	char *qmark;
+	char *colon;
+
 	(void)dir_oi; // Silences compiler warning
 
 	// Error conditions!
@@ -1624,7 +1627,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 		return -EIO;
 
 	// Is the name too long?
-	else if (strlen(symname) > OSPFS_MAXSYMLINKLEN || dentry->d_name.len > OSPFS_MAXNAMELEN)
+	else if (dentry->d_name.len > OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
 
 	// See if the file already exists
@@ -1649,12 +1652,47 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	if (IS_ERR(od))
 		return PTR_ERR(od);
 
+	// Check to see for symbolic links
+	// and store a modified version of the link name for look_up ease later
+	qmark = strpbrk(symname, "?");
+	colon = strpbrk(symname, ":");
+
+	if(qmark && colon && colon > qmark) // conditional mode
+	{
+		// We will strip off the "root?" prefix, as this is the only condition in this lab
+		// next we will store the string as "?<root_path>\0:<not_root_path>\0>". The "?" char
+		// tells us we are in conditional mode, while the first NULL byte will be used to tell
+		// nd_set_link when the end of the string is, without having to make a copy of it.
+
+		// Check the lengh given the modified string we are storing
+		// We need to +1 for the extra NULL byte
+		size_t root_path_len = colon - qmark + 1;
+		size_t other_path_len = strlen(colon);
+
+		if(root_path_len + other_path_len > OSPFS_MAXNAMELEN)
+			return -ENAMETOOLONG;
+
+		new_inode_loc->oi_size = strlen(qmark) + 1; // The size is everything from "?" to end, plus the extra NULL
+		strncpy(new_inode_loc->oi_symlink, qmark, root_path_len - 1);
+		new_inode_loc->oi_symlink[root_path_len - 1] = '\0';
+
+		strncpy(new_inode_loc->oi_symlink + root_path_len, colon, other_path_len);
+		new_inode_loc->oi_symlink[new_inode_loc->oi_size] = '\0';
+	}
+	else // regular symlink
+	{
+		size_t name_len = strlen(symname);
+		if (name_len > OSPFS_MAXSYMLINKLEN)
+			return -ENAMETOOLONG;
+
+		new_inode_loc->oi_size = name_len;
+		strncpy(new_inode_loc->oi_symlink, symname, new_inode_loc->oi_size);
+		new_inode_loc->oi_symlink[new_inode_loc->oi_size] = '\0';
+	}
+
 	// Set the meta information for the inode. Setting all the defaults so as to not anger @ipetkov
 	new_inode_loc->oi_ftype = OSPFS_FTYPE_SYMLINK;
-	new_inode_loc->oi_size = strlen(symname);
-	strncpy(new_inode_loc->oi_symlink, symname, new_inode_loc->oi_size);
 	new_inode_loc->oi_nlink = 1;
-	new_inode_loc->oi_symlink[new_inode_loc->oi_size] = 0;
 
 	strncpy(od->od_name, dentry->d_name.name, dentry->d_name.len);
 	od->od_name[dentry->d_name.len] = 0;
@@ -1695,34 +1733,38 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
 	
 	/**
-	 * As above, a conditional symlink will always have
-	 * ? followed by :
+	 * As above, a conditional symlink will be formatted
+	 * as "?<root_path>\0:<not_root_path>\0>"
 	 */
 
-	char *qmark = strpbrk(oi->oi_symlink, "?");
-	char *colon = strpbrk(oi->oi_symlink, ":");
-	char *root_path;
+	char *path;
 
-	if (colon && qmark && qmark < colon) // If true, we're conditional
+	// If this isn't a conditonal link, set the path and return
+	if(oi->oi_symlink[0] != '?')
 	{
-		if (current->uid)
-		{
-			// We aren't root, so we use the second part of the expression
-			nd_set_link(nd, colon + 1);
-		}
-		else
-		{
-			// We are root, so use the first part
-			root_path = kmalloc(oi->oi_size, GFP_ATOMIC); // Cheat and make a bigger buffer than we need
-			memset(root_path, '\0', oi->oi_size);
-			strncpy(root_path, qmark + 1, (int)(qmark - colon));
-
-			nd_set_link(nd, root_path);
-		}
-	}
-	else
 		nd_set_link(nd, oi->oi_symlink);
+		return (void *) 0;
+	}
 
+	// If root, give a pointer to the start of the root path
+	if(current->uid == 0)
+	{
+		nd_set_link(nd, oi->oi_symlink + 1);
+		return (void *) 0;
+	}
+
+	// Otherwise fast forward to the non-root path
+	path = oi->oi_symlink;
+	while(*path != '\0')
+		path++;
+
+	// We've hit a null byte. Make sure we are still within our string
+	// and the next is in fact ":"
+	if(path - oi->oi_symlink >= oi->oi_size || path[1] != ':')
+		return ERR_PTR(-EIO);
+
+	// All clear!
+	nd_set_link(nd, path + 2);
 	return (void *) 0;
 }
 
