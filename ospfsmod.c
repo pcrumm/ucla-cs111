@@ -216,6 +216,26 @@ ospfs_inode_data(ospfs_inode_t *oi, uint32_t offset)
 	return (uint8_t *) ospfs_block(blockno) + (offset % OSPFS_BLKSIZE);
 }
 
+static inline uint32_t
+find_free_inode(void)
+{
+	uint32_t inode_no;
+	ospfs_inode_t *new_inode_loc;
+
+	// Determine what inode we can use... helps us detect out of space errors
+	// Start at 2 since the first two inodes are special
+	for (inode_no = 2; inode_no < ospfs_super->os_ninodes; inode_no++)
+	{
+		new_inode_loc = ospfs_inode(inode_no);
+
+		if (new_inode_loc->oi_nlink == 0)
+			return inode_no;
+	}
+
+	// If we've gotten this far, there are no free inodes to use
+	return 0;
+}
+
 
 /*****************************************************************************
  * LOW-LEVEL FILE SYSTEM FUNCTIONS
@@ -1519,7 +1539,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	ospfs_inode_t *file_oi = NULL;
 	ospfs_direntry_t *new_entry = NULL;
-	uint32_t entry_ino = 0;
+	uint32_t entry_ino = 0, block_no = 0;
 	int retval = 0;
 	struct inode *i;
 
@@ -1541,12 +1561,20 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 		goto error_cleanup;
 	}
 
-	// Allocate a single block for the file
-	entry_ino = allocate_block();
-	file_oi = ospfs_inode(entry_ino);
-	if(entry_ino == 0 || file_oi == NULL)
+	// Allocate a single block for the file and get an inode
+	entry_ino = find_free_inode();
+	block_no = allocate_block();
+	if(entry_ino == 0 || block_no == 0)
 	{
-		retval = (entry_ino == 0 ? -ENOSPC : -EIO);
+		retval = -ENOSPC;
+		goto error_cleanup;
+	}
+
+	file_oi = ospfs_inode(entry_ino);
+
+	if(file_oi == NULL)
+	{
+		retval = -EIO;
 		goto error_cleanup;
 	}
 
@@ -1556,7 +1584,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	file_oi->oi_ftype = OSPFS_FTYPE_REG;
 	file_oi->oi_nlink = 1;
 	file_oi->oi_mode = mode;
-	file_oi->oi_direct[0] = entry_ino;
+	file_oi->oi_direct[0] = block_no;
 
 	dir_oi->oi_nlink++;
 
@@ -1636,16 +1664,13 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 
 	// Determine what inode we can use... helps us detect out of space errors
 	// Start at 2 since the first two inodes are special
-	for (entry_ino = 2; entry_ino < ospfs_super->os_ninodes; entry_ino++)
-	{
-		new_inode_loc = (ospfs_symlink_inode_t *) ospfs_inode(entry_ino);
+	entry_ino = find_free_inode();
+	new_inode_loc = (ospfs_symlink_inode_t *) ospfs_inode(entry_ino);
 
-		if (new_inode_loc->oi_nlink == 0)
-			break;
-	}
-
-	if (entry_ino == ospfs_super->os_ninodes || new_inode_loc->oi_nlink > 0)
+	if(entry_ino == 0)
 		return -ENOSPC;
+	else if(new_inode_loc == NULL)
+		return -EIO;
 
 	// Get our new entry
 	od = create_blank_direntry(dir_oi);
