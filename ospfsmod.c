@@ -1612,7 +1612,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
 
-	ospfs_symlink_inode_t *new_inode_loc; // Location of the inode for the symlink
+	ospfs_symlink_inode_t *new_inode_loc = NULL; // Location of the inode for the symlink
 	ospfs_direntry_t *od;
 
 	(void)dir_oi; // Silences compiler warning
@@ -1624,7 +1624,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 		return -EIO;
 
 	// Is the name too long?
-	else if (strlen(symname) < OSPFS_MAXSYMLINKLEN || dentry->d_name.len > OSPFS_MAXNAMELEN)
+	else if (strlen(symname) > OSPFS_MAXSYMLINKLEN || dentry->d_name.len > OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
 
 	// See if the file already exists
@@ -1633,7 +1633,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 
 	// Determine what inode we can use... helps us detect out of space errors
 	// Start at 2 since the first two inodes are special
-	for (entry_ino = 2; entry_ino == ospfs_super->os_ninodes; entry_ino++)
+	for (entry_ino = 2; entry_ino < ospfs_super->os_ninodes; entry_ino++)
 	{
 		new_inode_loc = (ospfs_symlink_inode_t *) ospfs_inode(entry_ino);
 
@@ -1641,7 +1641,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 			break;
 	}
 
-	if (entry_ino >= ospfs_super->os_ninodes && new_inode_loc->oi_nlink > 0)
+	if (entry_ino == ospfs_super->os_ninodes || new_inode_loc->oi_nlink > 0)
 		return -ENOSPC;
 
 	// Get our new entry
@@ -1659,6 +1659,8 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	strncpy(od->od_name, dentry->d_name.name, dentry->d_name.len);
 	od->od_name[dentry->d_name.len] = 0;
 	od->od_ino = entry_ino;
+
+	dir_oi->oi_nlink++;
 
 	// Instructor-provided code
 	{
