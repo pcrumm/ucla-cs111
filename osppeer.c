@@ -760,12 +760,54 @@ int main(int argc, char *argv[])
 
 	// First, download files named on command line.
 	for (; argc > 1; argc--, argv++)
+	{
 		if ((t = start_download(tracker_task, argv[1])))
-			task_download(t, tracker_task);
+		{
+			pid_t pid;
+			if((pid = fork()) < 0)
+			{
+				error("Unable to fork, will not download %s\n", t->filename);
+				continue;
+			}
+
+			// Child
+			if(pid == 0)
+			{
+				task_download(t, tracker_task);
+				exit(0);
+			}
+		}
+	}
+
+	// Join all forked children, blocking until they finish
+	// It would be possible to start some uploads before all downloads finish
+	// but we don't know when an upload request might come in, so let's go ahead
+	// and clean up any processes before then.
+	waitpid(-1, NULL, 0);
 
 	// Then accept connections from other peers and upload files to them!
+	// Since we check if any forked children have exited at the start of the loop
+	// the last forked process will not get joined until another request comes in.
+	// Thus after a request comes in, one child process will always remain, whether
+	// running or in a zombie state.
 	while ((t = task_listen(listen_task)))
-		task_upload(t);
+	{
+		pid_t pid;
+		waitpid(-1, NULL, WNOHANG);
+
+		if((pid = fork()) < 0)
+		{
+			error("Unable to fork, upload request ignored\n");
+			continue;
+		}
+
+		// Child
+		if(pid == 0)
+		{
+			task_upload(t);
+			exit(0);
+		}
+	}
 
 	return 0;
 }
