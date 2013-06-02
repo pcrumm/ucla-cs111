@@ -377,6 +377,10 @@ task_t *start_listen(void)
 	message("* Listening on port %d\n", listen_port);
 
 	t = task_new(TASK_PEER_LISTEN);
+
+	if(t == NULL)
+		return NULL;
+
 	t->peer_fd = fd;
 	return t;
 }
@@ -670,6 +674,10 @@ static task_t *task_listen(task_t *listen_task)
 		inet_ntoa(peer_addr.sin_addr), ntohs(peer_addr.sin_port));
 
 	t = task_new(TASK_UPLOAD);
+
+	if(t == NULL)
+		return NULL;
+
 	t->peer_fd = fd;
 	return t;
 }
@@ -811,6 +819,9 @@ int main(int argc, char *argv[])
 	tracker_task = start_tracker(tracker_addr, tracker_port);
 	listen_task = start_listen();
 	register_files(tracker_task, myalias);
+
+	if(listen_task == NULL)
+		die("unable to allocate listen_task\n");
 
 	child_count = 0;
 	// First, download files named on command line.
