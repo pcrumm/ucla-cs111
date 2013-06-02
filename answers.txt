@@ -25,6 +25,13 @@ Email: ipetkov@ucla.edu
 # EXERCISE 1: What method you used to make your peer download and upload
 #    files in parallel?  (~1-3 sentences)
 
+We decided to use forking to handle parellel uploads and downloads. The
+client will fork once for each specified download, but if a fork fails
+the client will NOT download the specified file, and should be run again.
+We then use a blocking wait for all downloads to finish to reclaim any
+resources before listening for other peers. For each connected peer we fork
+a process and use non-blocking waits to reclaim any finished forked children.
+
 # EXERCISE 2A: What conditions did you find and fix that would have
 #    triggered a buffer overrun bug?  (~1-3 sentences each)
 
