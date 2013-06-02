@@ -743,6 +743,7 @@ int main(int argc, char *argv[])
 	char *s;
 	const char *myalias;
 	struct passwd *pwent;
+	int child_count;
 
 	// Default tracker is read.cs.ucla.edu
 	osp2p_sscanf("131.179.80.139:11111", "%I:%d",
@@ -811,6 +812,7 @@ int main(int argc, char *argv[])
 	listen_task = start_listen();
 	register_files(tracker_task, myalias);
 
+	child_count = 0;
 	// First, download files named on command line.
 	for (; argc > 1; argc--, argv++)
 	{
@@ -829,6 +831,10 @@ int main(int argc, char *argv[])
 				task_download(t, tracker_task);
 				exit(0);
 			}
+
+			// Parent
+			if(pid > 0)
+				child_count++;
 		}
 	}
 
@@ -836,7 +842,8 @@ int main(int argc, char *argv[])
 	// It would be possible to start some uploads before all downloads finish
 	// but we don't know when an upload request might come in, so let's go ahead
 	// and clean up any processes before then.
-	waitpid(-1, NULL, 0);
+	while(child_count-- > 0)
+		waitpid(-1, NULL, WNOHANG);
 
 	// Then accept connections from other peers and upload files to them!
 	// Since we check if any forked children have exited at the start of the loop
