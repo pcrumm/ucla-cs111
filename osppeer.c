@@ -843,9 +843,12 @@ int main(int argc, char *argv[])
 				exit(0);
 			}
 
-			// Parent
+			// Free up memory and file descriptors in parent
 			if(pid > 0)
+			{
 				child_count++;
+				task_free(t);
+			}
 		}
 	}
 
@@ -878,6 +881,10 @@ int main(int argc, char *argv[])
 			task_upload(t);
 			exit(0);
 		}
+
+		// Free up memory and file descriptors in parent
+		if(pid > 0)
+			task_free(t);
 	}
 
 	return 0;
