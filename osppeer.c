@@ -854,7 +854,7 @@ int main(int argc, char *argv[])
 	// but we don't know when an upload request might come in, so let's go ahead
 	// and clean up any processes before then.
 	while(child_count-- > 0)
-		waitpid(-1, NULL, WNOHANG);
+		waitpid(-1, NULL, 0);
 
 	// Then accept connections from other peers and upload files to them!
 	// Since we check if any forked children have exited at the start of the loop
