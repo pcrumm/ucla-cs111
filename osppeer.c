@@ -495,6 +495,54 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 	return t;
 }
 
+// Checks that a specified path does not attempt to access an
+// absolute path or move up a directory. If this occurs, the path
+// is rejected and replaced with an empty string so the file does
+// not get served or saved in an outside directory.
+static void sanitize_file_path(task_t *t)
+{
+	assert(t != NULL);
+
+	// Check that the path isn't simply ".." or some "escaped" equivalent
+	if(strcmp(t->filename, "..") == 0
+		|| strcmp(t->filename, "\\..") == 0
+		|| strcmp(t->filename, ".\\.") == 0
+		|| strcmp(t->filename, "\\.\\.") == 0
+		)
+		goto badpath;
+
+	// Check for paths that include "../" or some "escaped" equivalent and reject them
+	if(strstr(t->filename, "../")
+		|| strstr(t->filename, "\\../")
+		|| strstr(t->filename, "\\.\\./")
+		|| strstr(t->filename, "\\..\\/")
+		|| strstr(t->filename, "\\.\\.\\/")
+		|| strstr(t->filename, ".\\./")
+		|| strstr(t->filename, ".\\.\\/")
+		|| strstr(t->filename, "..\\/")
+		)
+		goto badpath;
+
+	// If the path is an absolute path, prepend "." to it
+	if(t->filename[0] == '/' || (t->filename[0] == '\\' && t->filename[1] == '/'))
+	{
+		// If there is no more room to shift the string down, reject it
+		if(strlen(t->filename) + 2 >= FILENAMESIZ)
+			goto badpath;
+
+		char *temp = malloc((strlen(t->filename) + 2) * sizeof(char));
+		strncpy(temp, t->filename, FILENAMESIZ);
+		strcpy(t->filename, ".");
+		strcat(t->filename, temp);
+		free(temp);
+	}
+
+	return;
+
+	badpath:
+	strcpy(t->filename, "");
+	return;
+}
 
 // task_download(t, tracker_task)
 //	Downloads the file specified by the input task 't' into the current
@@ -527,6 +575,8 @@ static void task_download(task_t *t, task_t *tracker_task)
 		goto try_again;
 	}
 	osp2p_writef(t->peer_fd, "GET %s OSP2P\n", t->filename);
+
+	sanitize_file_path(t);
 
 	// Open disk file for the result.
 	// If the filename already exists, save the file in a name like
@@ -649,6 +699,8 @@ static void task_upload(task_t *t)
 		goto exit;
 	}
 	t->head = t->tail = 0;
+
+	sanitize_file_path(t);
 
 	t->disk_fd = open(t->filename, O_RDONLY);
 	if (t->disk_fd == -1) {
