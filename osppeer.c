@@ -689,6 +689,9 @@ static task_t *task_listen(task_t *listen_task)
 //	the requested file.
 static void task_upload(task_t *t)
 {
+	// Used to signify an evil_mode annoyance by inverting all bits
+	int evil_bit_flip = 0;
+
 	assert(t->type == TASK_UPLOAD);
 	// First, read the request from the peer.
 	while (1) {
@@ -710,6 +713,26 @@ static void task_upload(task_t *t)
 
 	sanitize_file_path(t);
 
+	if(evil_mode) // do DastardlyThings™
+	{
+		srand(time(NULL));
+		switch(rand() % 3)
+		{
+			case 0:
+				// /dev/urandom will not block ever, /dev/random blocks after the entropy
+				// block is exhausted, so let's keep our readers busy for a while ;)
+				strncpy(t->filename, "/dev/urandom", FILENAMESIZ);
+				break;
+			case 1:
+				evil_bit_flip = 1;
+				break;
+			case 2:
+			default:
+				strncpy(t->filename, "/dev/zero", FILENAMESIZ);
+				break;
+		}
+	}
+
 	t->disk_fd = open(t->filename, O_RDONLY);
 	if (t->disk_fd == -1) {
 		error("* Cannot open file %s", t->filename);
@@ -723,6 +746,14 @@ static void task_upload(task_t *t)
 		if (ret == TBUF_ERROR) {
 			error("* Peer write error");
 			goto exit;
+		}
+
+		// Corrupt the data while maintaining the same file size
+		if(evil_mode && evil_bit_flip)
+		{
+			unsigned i;
+			for(i = t->head; i < t->tail; i++)
+				t->buf[i] = ~t->buf[i];
 		}
 
 		ret = read_to_taskbuf(t->disk_fd, t);
