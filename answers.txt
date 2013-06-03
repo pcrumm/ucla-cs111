@@ -47,6 +47,17 @@ worked just as well, without the complexity of the resize changes.
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
 
+Upload attacks:
+We've implemented 2 types of upload attacks: The first attack attempts to fill up the
+victim's hard drive (as well as causing it to indefinitely hang if it processes requests
+sequentially) by uploading the contents of /dev/null or /dev/urandom. Thus we chew up the victim's
+CPU and memory resources.
+The second attack we serve the requested file, however, we first invert every single bit before
+transmitting it. Although this is more of an annoyance than an actual attack, we could selectively
+corrupt specific parts of the file and thus inject other malicious code which could exploit vulnerabilities
+in other programs which attempt to open it. As this is an exercise and not an actual attack, we
+refrain from such despicableness.
+
 # Extra credit problems
 #Extra credit problem: none
 

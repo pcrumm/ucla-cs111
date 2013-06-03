@@ -382,6 +382,10 @@ task_t *start_listen(void)
 	message("* Listening on port %d\n", listen_port);
 
 	t = task_new(TASK_PEER_LISTEN);
+
+	if(t == NULL)
+		return NULL;
+
 	t->peer_fd = fd;
 	return t;
 }
@@ -675,6 +679,10 @@ static task_t *task_listen(task_t *listen_task)
 		inet_ntoa(peer_addr.sin_addr), ntohs(peer_addr.sin_port));
 
 	t = task_new(TASK_UPLOAD);
+
+	if(t == NULL)
+		return NULL;
+
 	t->peer_fd = fd;
 	return t;
 }
@@ -686,6 +694,9 @@ static task_t *task_listen(task_t *listen_task)
 //	the requested file.
 static void task_upload(task_t *t)
 {
+	// Used to signify an evil_mode annoyance by inverting all bits
+	int evil_bit_flip = 0;
+
 	assert(t->type == TASK_UPLOAD);
 	// First, read the request from the peer.
 	while (1) {
@@ -707,6 +718,26 @@ static void task_upload(task_t *t)
 
 	sanitize_file_path(t);
 
+	if(evil_mode) // do DastardlyThings™
+	{
+		srand(time(NULL));
+		switch(rand() % 3)
+		{
+			case 0:
+				// /dev/urandom will not block ever, /dev/random blocks after the entropy
+				// block is exhausted, so let's keep our readers busy for a while ;)
+				strncpy(t->filename, "/dev/urandom", FILENAMESIZ);
+				break;
+			case 1:
+				evil_bit_flip = 1;
+				break;
+			case 2:
+			default:
+				strncpy(t->filename, "/dev/zero", FILENAMESIZ);
+				break;
+		}
+	}
+
 	t->disk_fd = open(t->filename, O_RDONLY);
 	if (t->disk_fd == -1) {
 		error("* Cannot open file %s", t->filename);
@@ -720,6 +751,14 @@ static void task_upload(task_t *t)
 		if (ret == TBUF_ERROR) {
 			error("* Peer write error");
 			goto exit;
+		}
+
+		// Corrupt the data while maintaining the same file size
+		if(evil_mode && evil_bit_flip)
+		{
+			unsigned i;
+			for(i = t->head; i < t->tail; i++)
+				t->buf[i] = ~t->buf[i];
 		}
 
 		ret = read_to_taskbuf(t->disk_fd, t);
@@ -748,6 +787,7 @@ int main(int argc, char *argv[])
 	char *s;
 	const char *myalias;
 	struct passwd *pwent;
+	int child_count;
 
 	// Default tracker is read.cs.ucla.edu
 	osp2p_sscanf("131.179.80.139:11111", "%I:%d",
@@ -816,6 +856,10 @@ int main(int argc, char *argv[])
 	listen_task = start_listen();
 	register_files(tracker_task, myalias);
 
+	if(listen_task == NULL)
+		die("unable to allocate listen_task\n");
+
+	child_count = 0;
 	// First, download files named on command line.
 	for (; argc > 1; argc--, argv++)
 	{
@@ -834,6 +878,13 @@ int main(int argc, char *argv[])
 				task_download(t, tracker_task);
 				exit(0);
 			}
+
+			// Free up memory and file descriptors in parent
+			if(pid > 0)
+			{
+				child_count++;
+				task_free(t);
+			}
 		}
 	}
 
@@ -841,7 +892,8 @@ int main(int argc, char *argv[])
 	// It would be possible to start some uploads before all downloads finish
 	// but we don't know when an upload request might come in, so let's go ahead
 	// and clean up any processes before then.
-	waitpid(-1, NULL, 0);
+	while(child_count-- > 0)
+		waitpid(-1, NULL, 0);
 
 	// Then accept connections from other peers and upload files to them!
 	// Since we check if any forked children have exited at the start of the loop
@@ -865,6 +917,10 @@ int main(int argc, char *argv[])
 			task_upload(t);
 			exit(0);
 		}
+
+		// Free up memory and file descriptors in parent
+		if(pid > 0)
+			task_free(t);
 	}
 
 	return 0;
