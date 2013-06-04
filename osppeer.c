@@ -851,6 +851,8 @@ void do_dastardly_things(task_t *tracker_task)
 					attack_buffer[size] = '\0';
 
 					osp2p_writef(t->peer_fd, "GET %s OSP2P\n", attack_buffer);
+
+					free(attack_buffer);
 					break;
 				}
 				case 3:
@@ -864,6 +866,8 @@ void do_dastardly_things(task_t *tracker_task)
 					osp2p_writef(t->peer_fd, "GET ");
 					write(t->peer_fd, attack_buffer, size);
 					osp2p_writef(t->peer_fd, " OSP2P\n");
+
+					free(attack_buffer);
 					break;
 				}
 			}
