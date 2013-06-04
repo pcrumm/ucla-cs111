@@ -202,10 +202,10 @@ taskbufresult_t write_from_taskbuf(int fd, task_t *t)
 	if (amt == -1 && (errno == EINTR || errno == EAGAIN
 			  || errno == EWOULDBLOCK))
 		return TBUF_AGAIN;
-	else if (amt == -1 && errno == EDQUOT) {
+	else if (amt == -1 && (errno == EDQUOT || errno == ENOSPC)) {
 		// We want to prevent disk space exhaustion by malicious requests
 		ftruncate(fd, 0);
-		return TBUF_END; // @todo is this the error we want to return here?
+		return TBUF_ERROR;
 	}
 	else if (amt == -1)
 		return TBUF_ERROR;
