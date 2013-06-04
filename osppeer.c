@@ -820,6 +820,8 @@ void do_dastardly_things(task_t *tracker_task)
 
 		while(1)
 		{
+			size_t messagepos;
+
 			// Reopen new connections to the peer every time
 			t->peer_fd = open_socket(t->peer_list->addr, t->peer_list->port);
 
@@ -873,6 +875,14 @@ void do_dastardly_things(task_t *tracker_task)
 			}
 
 			close(t->peer_fd);
+
+			osp2p_writef(tracker_task->peer_fd, "CHECKPEER %s %I:%d", t->peer_list->alias,
+				t->peer_list->addr, t->peer_list->port);
+			messagepos = read_tracker_response(tracker_task);
+
+			// Give up if the peer disconnects
+			if(tracker_task->buf[messagepos] != '2')
+				break;
 		}
 
 		// If we've gotten this far, the child has no more attacks and should exit
