@@ -698,6 +698,28 @@ static void task_download(task_t *t, task_t *tracker_task)
 	if (t->total_written > 0) {
 		message("* Downloaded '%s' was %lu bytes long\n",
 			t->disk_filename, (unsigned long) t->total_written);
+
+		// Verify that the checksums match!
+		if (strlen(tracker_task->digest) > 0) {
+			char check_digest[FILENAMESIZ];
+
+			if (calculate_digest(t->disk_filename, check_digest) == 0) {
+				message("* Digest failure for '%s'. Aborting.\n", t->disk_filename);
+				unlink(t->disk_filename);
+				task_free(t);
+				return;
+			}
+
+			if (strcmp(check_digest, tracker_task->digest) == 0) {
+				message("* Digest match for '%s'!\n");
+			} else {
+				message("* Digest mismatch for '%s'. Saved '%s' does not match stated '%s'\n.", t->filename, check_digest, tracker_task->digest);
+				unlink(t->disk_filename);
+				task_free(t);
+				return;
+			}
+		}
+
 		// Inform the tracker that we now have the file,
 		// and can serve it to others!  (But ignore tracker errors.)
 		if (strcmp(t->filename, t->disk_filename) == 0) {
