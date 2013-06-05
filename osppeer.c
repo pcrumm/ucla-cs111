@@ -1058,29 +1058,29 @@ int main(int argc, char *argv[])
 	// First, download files named on command line.
 	for (; argc > 1 && !evil_mode; argc--, argv++)
 	{
-		if ((t = start_download(tracker_task, argv[1])))
+		pid_t pid;
+		if((pid = fork()) < 0)
 		{
-			pid_t pid;
-			if((pid = fork()) < 0)
-			{
-				error("Unable to fork, will not download %s\n", t->filename);
-				continue;
-			}
-
-			// Child
-			if(pid == 0)
-			{
-				task_download(t, tracker_task);
-				exit(0);
-			}
-
-			// Free up memory and file descriptors in parent
-			if(pid > 0)
-			{
-				child_count++;
-				task_free(t);
-			}
+			error("Unable to fork, will not download %s\n", argv[1]);
+			continue;
 		}
+
+		// Child
+		if(pid == 0)
+		{
+			// Start and compete the download in the child
+			// Thus if the tracker doesn't respond with a suitable format
+			// Only the child will panic and die without killing the parent
+			// or any other valid sub-processes that are running
+			if ((t = start_download(tracker_task, argv[1])))
+				task_download(t, tracker_task);
+
+			exit(0);
+		}
+
+		// Parent
+		if(pid > 0)
+			child_count++;
 	}
 
 	// Join all forked children, blocking until they finish
