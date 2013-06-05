@@ -67,6 +67,7 @@ typedef struct task {
 
 	char filename[FILENAMESIZ];	// Requested filename
 	char disk_filename[FILENAMESIZ]; // Local filename (TASK_DOWNLOAD)
+	char digest[FILENAMESIZ]; // md5 digest for filename @todo check length
 
 	peer_t *peer_list;	// List of peers that have 'filename'
 				// (TASK_DOWNLOAD).  The task_download
@@ -509,6 +510,20 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 	// grabbing all possible peers anyway so a specific file isn't needed
 	if(evil_mode)
 		filename = "";
+
+	if (strlen(filename) > 0) { // If we aren't using an empty filename, we want to be able to checksum test
+		message("* Getting checksum for '%s'\n", filename);
+		osp2p_writef(tracker_task->peer_fd, "MD5SUM %s\n", filename);
+		messagepos = read_tracker_response(tracker_task);
+
+		s1 = tracker_task->buf;
+		s2 = memchr(s1, '\n', (tracker_task->buf + messagepos) - s1);
+
+		osp2p_snscanf(s1, (s2 - s1), "%s\n200 MD5 sum reported", tracker_task->digest);
+		tracker_task->digest[FILENAMESIZ - 1] = '\0';
+
+		message("* Got checksum '%s'\n", tracker_task->digest);
+	}
 
 	message("* Finding peers for '%s'\n", filename);
 
