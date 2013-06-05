@@ -43,6 +43,8 @@ We limited each call to strcpy to a fixed size, FILENAMESIZ, by switching to str
 We raised the maximum number of possible peers by increasing the size of taskbuf. We initially
 attempted a dynamic approach, but found that simply choosing an arbitrarily large number for the bufsize
 worked just as well, without the complexity of the resize changes.
+Additionally, we implemented MD5 checksum checking if the tracker has a registered checksum for that
+file. This helps us avoid corrupted files and determine if we are being attacked.
 
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
@@ -58,8 +60,8 @@ checks for the string "../". Thus if we are lucky we will eventually hit the fil
 victim to serve an endless file.
 Next we specify a path of many repetitive characters meant to overflow the file name buffer, corrupting
 the victim's stack. Alternatively, we try the same attack but with many NULL bytes instead.
-Finally, we continuously send file requests to the victim, while alternating our previously described
-attacks in an attempt to monopolize the victim's resources if not crash it entirely.
+Finally, we continuously send file requests to the victim (up to 1000 times), while alternating our
+previously described attacks in an attempt to monopolize the victim's resources if not crash it entirely.
 
 Upload attacks:
 We've implemented 2 types of upload attacks: The first attack attempts to fill up the
@@ -73,6 +75,7 @@ in other programs which attempt to open it. As this is an exercise and not an ac
 refrain from such despicableness.
 
 # Extra credit problems
-#Extra credit problem: none
+Extra credit problem: File Integrity
+We have implemented checking the MD5 checksum of downloaded files.
 
 # Add any other information you'd like us to know below this line.
