@@ -521,6 +521,12 @@ static void sanitize_file_path(task_t *t)
 {
 	assert(t != NULL);
 
+	// If filename is far too long, it'll run over the end and we'll never see a
+	// null byte, causing length functions to fail. This will prevent that.
+	t->filename[FILENAMESIZ] = '\0';
+	if (strlen(t->filename) >= FILENAMESIZ)
+		goto badpath;
+
 	// Check that the path isn't simply ".." or some "escaped" equivalent
 	if(strcmp(t->filename, "..") == 0
 		|| strcmp(t->filename, "\\..") == 0
