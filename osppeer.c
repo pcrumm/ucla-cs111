@@ -523,10 +523,12 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 		s1 = tracker_task->buf;
 		s2 = memchr(s1, '\n', (tracker_task->buf + messagepos) - s1);
 
-		osp2p_snscanf(s1, (s2 - s1), "%s\n200 MD5 sum reported", tracker_task->digest);
-		tracker_task->digest[MD5_LENGTH - 1] = '\0';
+		if(tracker_task->buf[messagepos] == '2') {
+			osp2p_snscanf(s1, (s2 - s1), "%s\n", tracker_task->digest);
+			tracker_task->digest[MD5_LENGTH - 1] = '\0';
 
-		message("* Got checksum '%s'\n", tracker_task->digest);
+			message("* Got checksum '%s'\n", tracker_task->digest);
+		}
 	}
 
 	message("* Finding peers for '%s'\n", filename);
@@ -717,7 +719,7 @@ static void task_download(task_t *t, task_t *tracker_task)
 			if (strcmp(check_digest, tracker_task->digest) == 0) {
 				message("* Digest match for '%s'!\n");
 			} else {
-				message("* Digest mismatch for '%s'. Saved '%s' does not match stated '%s'\n.", t->filename, check_digest, tracker_task->digest);
+				message("* Digest mismatch for '%s'. Saved '%s' does not match stated '%s'.\n", t->filename, check_digest, tracker_task->digest);
 				unlink(t->disk_filename);
 				task_free(t);
 				return;
