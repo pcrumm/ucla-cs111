@@ -75,6 +75,39 @@ typedef struct task {
 				// at a time, if a peer misbehaves.
 } task_t;
 
+// calculate_digest(fn, digest)
+// Calculates a digest for the given filename.
+// At this point, we assume that filenames are reliable.
+// Returns the number of characters in the digest. Non-zero indicates success.
+#define MD5_COMPUTE_BUFFER_SIZ 2048 // Arbitrary
+int calculate_digest(char *fn, char *digest)
+{
+	char buf[MD5_COMPUTE_BUFFER_SIZ + 1]; // the + 1 allows for the null byte
+
+	md5_state_t s;
+	md5_init(&s);
+
+	int read_size, f;
+
+	if ((f = open(fn, O_RDONLY))) {
+		while (1) {
+			read_size = (int) read(f, buf, MD5_COMPUTE_BUFFER_SIZ);
+			buf[MD5_COMPUTE_BUFFER_SIZ] = '\0';
+
+			if (read_size == 0) { // We're done!
+				read_size = md5_finish_text(&s, digest, 1);
+				digest[read_size] = '\0';
+
+				close(f);
+				return read_size;
+			}
+
+			md5_append(&s, (md5_byte_t*) buf, read_size);
+		}
+	}
+	else
+		return 0;
+}
 
 // task_new(type)
 //	Create and return a new task of type 'type'.
