@@ -527,7 +527,12 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 			osp2p_snscanf(s1, (s2 - s1), "%s\n", tracker_task->digest);
 			tracker_task->digest[MD5_LENGTH - 1] = '\0';
 
-			message("* Got checksum '%s'\n", tracker_task->digest);
+			if (strlen(tracker_task->digest) < 5) {
+				strcpy("", tracker_task->digest);
+				message("* Rejected checksum for '%s'. Checksum too short.\n", filename);
+			} else {
+				message("* Got checksum '%s'\n", tracker_task->digest);
+			}
 		}
 	}
 
