@@ -39,6 +39,8 @@ static int listen_port;
 #define TASKBUFSIZ	81920	// Size of task_t::buf
 #define FILENAMESIZ	256	// Size of task_t::filename
 
+ #define MD5_LENGTH 128 // an MD5 hash is 128 bits, not sure on the length of our representation
+
 typedef enum tasktype {		// Which type of connection is this?
 	TASK_TRACKER,		// => Tracker connection
 	TASK_PEER_LISTEN,	// => Listens for upload requests
@@ -67,7 +69,7 @@ typedef struct task {
 
 	char filename[FILENAMESIZ];	// Requested filename
 	char disk_filename[FILENAMESIZ]; // Local filename (TASK_DOWNLOAD)
-	char digest[FILENAMESIZ]; // md5 digest for filename @todo check length
+	char digest[MD5_LENGTH]; // md5 digest for filename
 
 	peer_t *peer_list;	// List of peers that have 'filename'
 				// (TASK_DOWNLOAD).  The task_download
@@ -520,7 +522,7 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 		s2 = memchr(s1, '\n', (tracker_task->buf + messagepos) - s1);
 
 		osp2p_snscanf(s1, (s2 - s1), "%s\n200 MD5 sum reported", tracker_task->digest);
-		tracker_task->digest[FILENAMESIZ - 1] = '\0';
+		tracker_task->digest[MD5_LENGTH - 1] = '\0';
 
 		message("* Got checksum '%s'\n", tracker_task->digest);
 	}
@@ -701,7 +703,7 @@ static void task_download(task_t *t, task_t *tracker_task)
 
 		// Verify that the checksums match!
 		if (strlen(tracker_task->digest) > 0) {
-			char check_digest[FILENAMESIZ];
+			char check_digest[MD5_LENGTH];
 
 			if (calculate_digest(t->disk_filename, check_digest) == 0) {
 				message("* Digest failure for '%s'. Aborting.\n", t->disk_filename);
