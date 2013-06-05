@@ -24,6 +24,8 @@
 #include "md5.h"
 #include "osp2p.h"
 
+#define NUM_ATTACKS 1000 // Number of download attaks to launch at a peer before giving up
+
 int evil_mode;			// nonzero iff this peer should behave badly
 
 static struct in_addr listen_addr;	// Define listening endpoint
@@ -878,6 +880,12 @@ void do_dastardly_things(task_t *tracker_task)
 	while(t->peer_list != NULL)
 	{
 		pid_t pid;
+		int attacks = 0;
+
+		// Let's not attack our selves
+		if(t->peer_list->addr.s_addr == listen_addr.s_addr && t->peer_list->port == listen_port)
+			continue;
+
 		if((pid = fork()) < 0)
 		{
 			error("Unable to fork any more attacks\n");
@@ -896,14 +904,13 @@ void do_dastardly_things(task_t *tracker_task)
 		message("* Attacking %s:%d\n", inet_ntoa(t->peer_list->addr), t->peer_list->port);
 		srand(time(NULL));
 
-		while(1)
+		while(attacks++ < NUM_ATTACKS)
 		{
-			size_t messagepos;
-
 			// Reopen new connections to the peer every time
 			t->peer_fd = open_socket(t->peer_list->addr, t->peer_list->port);
 
 			if (t->peer_fd == -1) {
+				error("* Unable to open socket to %s:%d, \n", inet_ntoa(t->peer_list->addr), t->peer_list->port);
 				task_free(t);
 				exit(1);
 			}
@@ -949,18 +956,10 @@ void do_dastardly_things(task_t *tracker_task)
 			}
 
 			close(t->peer_fd);
-
-			osp2p_writef(tracker_task->peer_fd, "CHECKPEER %s %I:%d", t->peer_list->alias,
-				t->peer_list->addr, t->peer_list->port);
-			messagepos = read_tracker_response(tracker_task);
-
-			// Give up if the peer disconnects
-			if(tracker_task->buf[messagepos] != '2')
-				break;
 		}
 
 		// If we've gotten this far, the child has no more attacks and should exit
-		task_free(t);
+		message("* Finished attacking %s:%d\n", inet_ntoa(t->peer_list->addr), t->peer_list->port);
 		exit(0);
 	}
 
