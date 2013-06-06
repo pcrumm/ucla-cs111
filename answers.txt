@@ -53,11 +53,12 @@ Download attacks:
 We've implemented several download attacks. Firstly our client will find every peer
 that's connected to the tracker and begin to attack each one. Our first two attacks attempt to access
 "/dev/zero" as to get the victim stuck in writing indefinitely and using up it's CPU cycles. We do this
-by specifying a path like "\//////dev/zero". The backslash is to confuse simple checks that the first
-character is "/", while still having the system serve that path. Our second attack uses a path with many
-instances of "\.\.\/" followed by "/dev/zero". This "escaping" of the characters is done to confuse simple
-checks for the string "../". Thus if we are lucky we will eventually hit the file system root and get the
-victim to serve an endless file.
+by specifying an absolute path like "//////dev/zero". Our second attack uses a path with many
+instances of "../" followed by "/dev/zero" in an attempt to traverse the directories until we hit the root.
+Next we prepend "/dev/zero" with ".../...//" for our attack file path. Thus a single pass to remove
+instances of the string "../" while keeping the rest will in fact leave behind another collection of
+"../" repetitions. Thus anyone attempting to sanitize their input paths with a single pass will be
+caught off guard.
 Next we specify a path of many repetitive characters meant to overflow the file name buffer, corrupting
 the victim's stack. Alternatively, we try the same attack but with many NULL bytes instead.
 Finally, we continuously send file requests to the victim (up to 1000 times), while alternating our

