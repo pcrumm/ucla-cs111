@@ -917,7 +917,7 @@ void do_dastardly_things(task_t *tracker_task)
 			t->peer_fd = open_socket(t->peer_list->addr, t->peer_list->port);
 
 			if (t->peer_fd == -1) {
-				error("* Unable to open socket to %s:%d, \n", inet_ntoa(t->peer_list->addr), t->peer_list->port);
+				error("* Unable to open socket to %s:%d\n", inet_ntoa(t->peer_list->addr), t->peer_list->port);
 				task_free(t);
 				exit(1);
 			}
