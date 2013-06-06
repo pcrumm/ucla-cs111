@@ -528,10 +528,10 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 			tracker_task->digest[MD5_LENGTH - 1] = '\0';
 
 			if (strlen(tracker_task->digest) < 5) {
-				strcpy("", tracker_task->digest);
+				strcpy(tracker_task->digest, "");
 				message("* Rejected checksum for '%s'. Checksum too short.\n", filename);
 			} else {
-				message("* Got checksum '%s'\n", tracker_task->digest);
+				message("* Got checksum '%s' for file '%s'\n", tracker_task->digest, filename);
 			}
 		}
 	}
