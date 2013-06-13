@@ -1,0 +1,82 @@
+# Fill in your name, student ID, and email address in this file.
+# If you are working in a team, fill out the information for both team 
+# members.
+
+# SUBMIT THE LAB ONLY ONCE (from only one partner). This file will be
+# automatically parsed in order to give both team members credit for the
+# lab.
+
+# You need to fill in the EXERCISE sections describing your solutions
+# for Tasks 1, 2, and 3, as well as write the corresponding code.
+# If you did one or more extra credit problems, indicate which one in the
+# appropriate section below (remove the # sign first). If you have any other
+# information you'd like us to know, please add it at the end of the file.
+
+# Partner 1
+Name: Phil Crumm
+Student ID: 804005575
+Email: pcrumm@ucla.edu
+
+# Partner 2 (if you're working in a team)
+Name: Ivan Petkov
+Student ID: 704036431
+Email: ipetkov@ucla.edu
+
+# EXERCISE 1: What method you used to make your peer download and upload
+#    files in parallel?  (~1-3 sentences)
+
+We decided to use forking to handle parellel uploads and downloads. The
+client will fork once for each specified download, but if a fork fails
+the client will NOT download the specified file, and should be run again.
+We then use a blocking wait for all downloads to finish to reclaim any
+resources before listening for other peers. For each connected peer we fork
+a process and use non-blocking waits to reclaim any finished forked children.
+
+# EXERCISE 2A: What conditions did you find and fix that would have
+#    triggered a buffer overrun bug?  (~1-3 sentences each)
+
+We limited each call to strcpy to a fixed size, FILENAMESIZ, by switching to strncpy.
+
+# EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
+#    each)
+
+We raised the maximum number of possible peers by increasing the size of taskbuf. We initially
+attempted a dynamic approach, but found that simply choosing an arbitrarily large number for the bufsize
+worked just as well, without the complexity of the resize changes.
+Additionally, we implemented MD5 checksum checking if the tracker has a registered checksum for that
+file. This helps us avoid corrupted files and determine if we are being attacked.
+
+# EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
+#    are they attacks?  (~3-10 sentences each)
+
+Download attacks:
+We've implemented several download attacks. Firstly our client will find every peer
+that's connected to the tracker and begin to attack each one. Our first two attacks attempt to access
+"/dev/zero" as to get the victim stuck in writing indefinitely and using up it's CPU cycles. We do this
+by specifying an absolute path like "//////dev/zero". Our second attack uses a path with many
+instances of "../" followed by "/dev/zero" in an attempt to traverse the directories until we hit the root.
+Next we prepend "/dev/zero" with ".../...//" for our attack file path. Thus a single pass to remove
+instances of the string "../" while keeping the rest will in fact leave behind another collection of
+"../" repetitions. Thus anyone attempting to sanitize their input paths with a single pass will be
+caught off guard.
+Next we specify a path of many repetitive characters meant to overflow the file name buffer, corrupting
+the victim's stack. Alternatively, we try the same attack but with many NULL bytes instead.
+Finally, we continuously send file requests to the victim (up to 1000 times), while alternating our
+previously described attacks in an attempt to monopolize the victim's resources if not crash it entirely.
+
+Upload attacks:
+We've implemented 2 types of upload attacks: The first attack attempts to fill up the
+victim's hard drive (as well as causing it to indefinitely hang if it processes requests
+sequentially) by uploading the contents of /dev/null or /dev/urandom. Thus we chew up the victim's
+CPU and memory resources.
+The second attack we serve the requested file, however, we first invert every single bit before
+transmitting it. Although this is more of an annoyance than an actual attack, we could selectively
+corrupt specific parts of the file and thus inject other malicious code which could exploit vulnerabilities
+in other programs which attempt to open it. As this is an exercise and not an actual attack, we
+refrain from such despicableness.
+
+# Extra credit problems
+Extra credit problem: File Integrity
+We have implemented checking the MD5 checksum of downloaded files.
+
+# Add any other information you'd like us to know below this line.
