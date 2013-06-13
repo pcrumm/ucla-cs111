@@ -1,0 +1,26 @@
+UCLA CS 111
+Professor Paul Eggert
+Spring 2013
+
+Lab 1C Time Travel Shell
+
+Phil Crumm 804-005-575
+Ivan Petkov 704-036-431
+
+Current Concerns and Limitations:
+
+- Consecutive '(' tokens will not parse properly, however, the lab spec
+  indicates don't-care behavior for such cases, so the issue won't be fixed
+  unless needed. Consecutive ')' tokens cause no known issues.
+
+- Any semicolon (';') found outside of a subshell is treated as if a new
+  line was found (ie the two expressions were separated by new lines).
+  Thus the semicolon does not find it's way into the parsed tree. If,
+  however, a semicolon is found in any level of nested subshells, it is
+  parsed along inside the command tree as a sequence command.
+
+- If an error occurs while waiting on children in Time Travel mode, the
+  code will ignore it until it loops around and tries to wait on the pid
+  again. If for some unknown reason waiting on a specific pid with the
+  WNOHANG option fails every single time, our shell will be stuck in an
+  infinite loop.
