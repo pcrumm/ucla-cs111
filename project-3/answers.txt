@@ -1,0 +1,57 @@
+# Fill in your name, student ID, and email address in this file.
+# If you are working in a team, fill out the information for both team 
+# members.
+
+# SUBMIT THE LAB ONLY ONCE (from only one partner). This file will be
+# automatically parsed in order to give both team members credit for the
+# lab.
+
+# If you did one or more extra credit problems, indicate which one in the
+# appropriate section below (remove the # sign first). If you have any other
+# information you'd like us to know, please add it at the end of the file.
+
+# Partner 1
+Name: Phil Crumm
+Student ID: 804005575
+Email: pcrumm@ucla.edu
+
+# Partner 2 (if you're working in a team)
+Name: Ivan Petkov
+Student ID: 704036431
+Email: ipetkov@ucla.edu
+
+# Extra credit problems
+#Extra credit problem: none
+
+# Add any other information you'd like us to know below this line.
+
+Since our module uses file sizes to determine how many blocks have been
+allocated to an inode, leaving a file with a size of zero will cause a block
+leak when the file is deleted. For example, this can happen if a file is
+created and nothing is written to it. To avoid this, we only allocate a block
+when the first write occurs. We allocate a block during creation, however, to
+make sure there is at least one available, but it is immediately freed. Thus
+it is entirely possible for a file to be successfully created, but the last
+possible block allocated to another file before a write can occur.
+
+When reading and writing to files with a given byte offset, an I/O error will
+occur if the sum of the specified offset and the count of bytes to read
+overflows. For example, if the specified offset is the max value loff_t can
+hold, and 10 bytes are requested to be read or written, the file system will
+report an error.
+
+Attempting to read past the end of a file, however, will simply read 0 bytes
+without signaling an I/O error. We have taken this approach as it seems to be
+the expected behavior given by the default test suite.
+
+Note: using the ls or any other Linux file utility will NOT display the proper
+link counts for files in the OSPFS. Link counts are maintained internally and
+function as expected, however, our module does not update any inode structures
+that Linux passes in. Thus, for example, the ls utility will look at the native
+Linux inode link counts, so don't be surprised if it reports and unexpected
+link count.
+
+Since conditional links in this lab will always begin with "root?" our
+implementation simply checks that the symlink takes the form "?<file1>:<file2>".
+In the case of more robust conditional links we would implement more elaborate
+checks, but for the purpose of this lab we have not.
